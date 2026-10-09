@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Redragon Control
+Comment=Keyboard lighting, wheel and button mappings
+Exec=@LAUNCHER@ tray
+Icon=io.github.redragon.Control
+Terminal=false
+Categories=Settings;HardwareSettings;GTK;
+Keywords=keyboard;RGB;Redragon;K686;
+StartupNotify=true
+StartupWMClass=io.github.redragon.Control
