@@ -16,6 +16,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
+from . import __version__
 from .core import Controller  # noqa: E402
 from .config import MODES, NATIVE_COLORS, validate_binding  # noqa: E402
 from .errors import ControlError  # noqa: E402
@@ -1148,7 +1149,7 @@ class ControlWindow(Adw.ApplicationWindow):
         self._file_dialog(False, lambda path: self._run(lambda: self.controller.import_profile(path), "Profile imported"))
 
     def _about(self, *_):
-        dialog = Adw.AboutDialog(application_name="Redragon Control", application_icon=APP_ID, developer_name="Redragon Control contributors", version="0.1.0", comments="Independent keyboard controls for GNOME. Not affiliated with Redragon.")
+        dialog = Adw.AboutDialog(application_name="Redragon Control", application_icon=APP_ID, developer_name="Redragon Control contributors", version=__version__, comments="Independent keyboard controls for GNOME. Not affiliated with Redragon.")
         dialog.present(self)
 
     def _toast(self, message):

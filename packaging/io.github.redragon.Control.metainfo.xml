@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.redragon.Control</id>
+  <name>Redragon Control</name>
+  <summary>Lighting and key remapping for Redragon K686 MAX keyboards</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.redragon"><name>Redragon Control contributors</name></developer>
+  <description>
+    <p>Control your Redragon K686 MAX keyboard with native desktop settings,
+    lighting effects, profiles and reversible key remapping.</p>
+    <p>Includes a one-time hardware setup helper and automatic startup after
+    sign-in. Requires a Linux desktop with background portal support and
+    udev device permissions. Independent software, not affiliated with Redragon.</p>
+  </description>
+  <launchable type="desktop-id">io.github.redragon.Control.desktop</launchable>
+  <provides><binary>redragon-control</binary><binary>redragonctl</binary></provides>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="0.2.0" date="2026-10-09"/></releases>
+</component>

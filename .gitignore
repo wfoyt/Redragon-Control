@@ -6,3 +6,8 @@ dist/
 *.egg-info/
 .pytest_cache/
 artifacts/
+
+.flatpak-builder/
+packaging/build/
+packaging/repo/
+packaging/source/

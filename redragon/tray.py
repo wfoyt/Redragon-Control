@@ -29,7 +29,7 @@ class TrayApplication(Gtk.Application):
         self.controller = Controller(config_path)
         digest = hashlib.sha256(str(self.controller.store.path).encode()).hexdigest()[:12]
         super().__init__(application_id="io.github.redragon.Control.Tray.p" + digest,
-                         flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+                         flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.supervisor = BackgroundSupervisor(self.controller)
         self.preferences = BackgroundStore(self.controller.store.path)
         self.indicator = None
@@ -39,6 +39,12 @@ class TrayApplication(Gtk.Application):
         self.settings_process = None
         self.last_error = None
 
+    def do_command_line(self, command_line):
+        self.activate()
+        if "open-settings" in command_line.get_arguments() and SetupStore(self.controller.store.path).completed():
+            self.open_settings()
+        return 0
+
     def do_activate(self):
         # A second autostart/manual invocation activates this instance silently.
         if self.indicator is not None:
@@ -46,7 +52,9 @@ class TrayApplication(Gtk.Application):
                 self.open_settings()
             return
         self.hold()
-        icon = Path(__file__).resolve().parent.parent / "data/io.github.redragon.Control.svg"
+        icon = Path("/app/share/icons/hicolor/scalable/apps/io.github.redragon.Control.svg")
+        if not icon.exists():
+            icon = Path(__file__).resolve().parent.parent / "data/io.github.redragon.Control.svg"
         self.indicator = AppIndicator.Indicator.new(
             "redragon-control", str(icon), AppIndicator.IndicatorCategory.HARDWARE)
         self.indicator.set_title("Redragon Control")
@@ -155,5 +163,6 @@ class TrayApplication(Gtk.Application):
         threading.Thread(target=stop, name="redragon-tray-stop", daemon=True).start()
 
 
-def run(config_path=None):
-    return TrayApplication(config_path).run([])
+def run(config_path=None, open_settings=False):
+    arguments = ["redragon-control"] + (["open-settings"] if open_settings else [])
+    return TrayApplication(config_path).run(arguments)

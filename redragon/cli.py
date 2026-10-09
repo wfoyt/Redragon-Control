@@ -16,7 +16,8 @@ def parser():
     root.add_argument("--demo", action="store_true", help="Explore the UI without hardware or saved changes")
     commands = root.add_subparsers(dest="command")
     commands.add_parser("gui", help="Open the native libadwaita app")
-    commands.add_parser("tray", help="Run the GNOME tray indicator without opening a settings window")
+    tray = commands.add_parser("tray", help="Run the GNOME tray indicator without opening a settings window")
+    tray.add_argument("--open-settings", action="store_true", help="Also open settings in the running tray's session")
     commands.add_parser("devices", help="List USB/HID device families without writing to them")
     commands.add_parser("status", help="Show settings, device capabilities and remapper status")
     commands.add_parser("doctor", help="Check dependencies and device permissions")
@@ -77,7 +78,7 @@ def main(argv=None):
             if args.demo:
                 raise ControlError("Tray mode requires real saved settings.")
             from .tray import run
-            return run(config_path=args.config) or 0
+            return run(config_path=args.config, open_settings=args.open_settings) or 0
         from .core import Controller
         controller = Controller(args.config, args.demo)
         if args.command == "devices":

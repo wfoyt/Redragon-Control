@@ -1,0 +1,60 @@
+{
+  "app-id": "io.github.redragon.Control",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "50",
+  "sdk": "org.gnome.Sdk",
+  "command": "redragon-control",
+  "finish-args": [
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--device=all",
+    "--filesystem=/run/udev:ro",
+    "--talk-name=org.kde.StatusNotifierWatcher",
+    "--talk-name=org.freedesktop.StatusNotifierWatcher",
+    "--env=PYTHONPATH=/app/lib/redragon-control"
+  ],
+  "modules": [
+    "shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json",
+    {
+      "name": "python-evdev",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --no-index --no-deps --no-build-isolation --target=/app/lib/redragon-control ."
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://files.pythonhosted.org/packages/63/fe/a17c106a1f4061ce83f04d14bcedcfb2c38c7793ea56bfb906a6fadae8cb/evdev-1.9.2.tar.gz",
+          "sha256": "5d3278892ce1f92a74d6bf888cc8525d9f68af85dbe336c95d1c87fb8f423069"
+        }
+      ]
+    },
+    {
+      "name": "redragon-control",
+      "buildsystem": "simple",
+      "build-commands": [
+        "mkdir -p /app/lib/redragon-control /app/bin /app/share/redragon-control",
+        "cp -r redragon /app/lib/redragon-control/",
+        "find /app/lib/redragon-control -type d -name __pycache__ -prune -exec rm -rf {} +",
+        "install -Dm755 redragon-control /app/bin/redragon-control",
+        "ln -s redragon-control /app/bin/redragonctl",
+        "install -Dm644 setup-hardware.sh /app/share/redragon-control/setup-hardware.sh",
+        "install -Dm644 data/70-redragon-control.rules /app/share/redragon-control/70-redragon-control.rules",
+        "install -Dm644 data/io.github.redragon.Control.svg /app/share/icons/hicolor/scalable/apps/io.github.redragon.Control.svg",
+        "sed -e 's|@LAUNCHER@|redragon-control|' -e 's|Exec=redragon-control tray|Exec=redragon-control gui|' data/io.github.redragon.Control.desktop.in > /app/share/redragon-control/desktop",
+        "install -Dm644 /app/share/redragon-control/desktop /app/share/applications/io.github.redragon.Control.desktop",
+        "install -Dm644 io.github.redragon.Control.metainfo.xml /app/share/metainfo/io.github.redragon.Control.metainfo.xml",
+        "install -Dm644 LICENSE /app/share/licenses/io.github.redragon.Control/LICENSE"
+      ],
+      "sources": [
+        {"type": "dir", "path": "../redragon", "dest": "redragon"},
+        {"type": "dir", "path": "../data", "dest": "data"},
+        {"type": "file", "path": "../scripts/setup-hardware.sh"},
+        {"type": "file", "path": "../LICENSE"},
+        {"type": "file", "path": "io.github.redragon.Control.metainfo.xml"},
+        {"type": "script", "dest-filename": "redragon-control", "commands": ["exec python3 -m redragon.flatpak_entry \"$@\""]}
+      ]
+    }
+  ]
+}

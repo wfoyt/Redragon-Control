@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "redragon-control"
-version = "0.1.0"
+version = "0.2.0"
 description = "Native libadwaita controls and a JSON CLI for Redragon K686 keyboards"
 requires-python = ">=3.11"
 license = "MIT"
