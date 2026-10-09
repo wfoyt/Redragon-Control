@@ -7,9 +7,9 @@ built for the **Redragon K686WBG-RGB-MAX**. No web view or Electron runtime.
 
 ![Native application preview](screenshots/lighting.png)
 
-## Install the Flatpak (0.2.0)
+## Install the Flatpak (0.2.1)
 
-Download `Redragon-Control-0.2.0-x86_64.flatpak` from
+Download `Redragon-Control-0.2.1-x86_64.flatpak` from
 [GitHub Releases](https://github.com/wfoyt/Redragon-Control/releases).
 Redragon Control is not available on Flathub. The Flathub remote below supplies
 the shared GNOME runtime only. The bundle includes
@@ -25,7 +25,7 @@ then double-click the bundle, or run these commands in its folder:
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./Redragon-Control-0.2.0-x86_64.flatpak
+flatpak install --user ./Redragon-Control-0.2.1-x86_64.flatpak
 flatpak run io.github.redragon.Control
 ```
 
@@ -83,7 +83,7 @@ directory (the installed `org.flatpak.Builder` build tool can also be used):
 flatpak install --user flathub org.gnome.Sdk//50 org.gnome.Platform//50
 flatpak-builder --user --force-clean --default-branch=stable --repo=packaging/repo packaging/build packaging/io.github.redragon.Control.json
 mkdir -p dist
-flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo packaging/repo dist/Redragon-Control-0.2.0-x86_64.flatpak io.github.redragon.Control stable
+flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo packaging/repo dist/Redragon-Control-0.2.1-x86_64.flatpak io.github.redragon.Control stable
 ```
 
 Dependency recipes are pinned and vendored in `packaging/shared-modules` with

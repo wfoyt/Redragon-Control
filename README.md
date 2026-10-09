@@ -39,8 +39,8 @@ It does not run on Windows or macOS.
 1. Install Flatpak through your distribution’s Software app or package manager
    if you do not already have it.
 2. Open [GitHub Releases](https://github.com/wfoyt/Redragon-Control/releases) and
-   download the `.flatpak` file under **Assets**. For version 0.2.0, it is
-   `Redragon-Control-0.2.0-x86_64.flatpak`.
+   download the `.flatpak` file under **Assets**. For version 0.2.1, it is
+   `Redragon-Control-0.2.1-x86_64.flatpak`.
 3. Double-click the downloaded file and choose **Install** in your Software app.
    If your desktop does not open Flatpak files, use the terminal steps below.
 4. Launch **Redragon Control** from your app launcher.
@@ -51,7 +51,7 @@ Open a terminal in the folder containing your download and run:
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./Redragon-Control-0.2.0-x86_64.flatpak
+flatpak install --user ./Redragon-Control-0.2.1-x86_64.flatpak
 flatpak run io.github.redragon.Control
 ```
 

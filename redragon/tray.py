@@ -1,6 +1,7 @@
 """GTK3 AppIndicator host. Settings stay in a separate GTK4 process."""
 
 import hashlib
+from configparser import ConfigParser
 import logging
 from pathlib import Path
 import signal
@@ -52,11 +53,19 @@ class TrayApplication(Gtk.Application):
                 self.open_settings()
             return
         self.hold()
-        icon = Path("/app/share/icons/hicolor/scalable/apps/io.github.redragon.Control.svg")
-        if not icon.exists():
-            icon = Path(__file__).resolve().parent.parent / "data/io.github.redragon.Control.svg"
+        icon = str(Path(__file__).resolve().parent.parent / "data/io.github.redragon.Control.svg")
+        flatpak = ConfigParser()
+        flatpak.read("/.flatpak-info")
+        if flatpak.has_section("Application"):
+            # The tray host runs outside the sandbox and cannot read /app.
+            # Flatpak exports this themed icon for the host desktop to resolve.
+            icon = "io.github.redragon.Control"
         self.indicator = AppIndicator.Indicator.new(
-            "redragon-control", str(icon), AppIndicator.IndicatorCategory.HARDWARE)
+            "redragon-control", icon, AppIndicator.IndicatorCategory.HARDWARE)
+        app_path = flatpak.get("Instance", "app-path", fallback=None)
+        if app_path:
+            # Also support hosts whose theme search path omits Flatpak exports.
+            self.indicator.set_icon_theme_path(str(Path(app_path) / "share/icons/hicolor/scalable/apps"))
         self.indicator.set_title("Redragon Control")
         self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
         menu = Gtk.Menu()
