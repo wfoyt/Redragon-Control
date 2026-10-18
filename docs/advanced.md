@@ -2,14 +2,14 @@
 
 [← Back to the README](../README.md)
 
-A native **GTK 4 / libadwaita** application and JSON CLI for Linux and GNOME,
+A native **GTK 4 / libadwaita** application and JSON CLI for Linux desktops,
 built for the **Redragon K686WBG-RGB-MAX**. No web view or Electron runtime.
 
 ![Native application preview](screenshots/lighting.png)
 
-## Install the Flatpak (0.2.1)
+## Install the Flatpak (0.2.2)
 
-Download `Redragon-Control-0.2.1-x86_64.flatpak` from
+Download `Redragon-Control-0.2.2-x86_64.flatpak` from
 [GitHub Releases](https://github.com/wfoyt/Redragon-Control/releases).
 Redragon Control is not available on Flathub. The Flathub remote below supplies
 the shared GNOME runtime only. The bundle includes
@@ -17,7 +17,7 @@ the app, evdev and tray libraries, and uses the GNOME 50 Flatpak runtime for
 Python, GTK and libadwaita. Host GTK/Python packages are not needed. The bundle
 works across Linux distributions on **x86_64** computers with Flatpak, udev,
 uinput and a graphical desktop supporting the Background portal (including
-GNOME and KDE). Other CPU architectures require a separate build. It does not
+GNOME and KDE Plasma). Other CPU architectures require a separate build. It does not
 run on Windows or macOS, or add support for other Redragon keyboard models.
 
 Install Flatpak using your distribution's Software app or package manager,
@@ -25,7 +25,7 @@ then double-click the bundle, or run these commands in its folder:
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./Redragon-Control-0.2.1-x86_64.flatpak
+flatpak install --user ./Redragon-Control-0.2.2-x86_64.flatpak
 flatpak run io.github.redragon.Control
 ```
 
@@ -83,7 +83,7 @@ directory (the installed `org.flatpak.Builder` build tool can also be used):
 flatpak install --user flathub org.gnome.Sdk//50 org.gnome.Platform//50
 flatpak-builder --user --force-clean --default-branch=stable --repo=packaging/repo packaging/build packaging/io.github.redragon.Control.json
 mkdir -p dist
-flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo packaging/repo dist/Redragon-Control-0.2.1-x86_64.flatpak io.github.redragon.Control stable
+flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo packaging/repo dist/Redragon-Control-0.2.2-x86_64.flatpak io.github.redragon.Control stable
 ```
 
 Dependency recipes are pinned and vendored in `packaging/shared-modules` with
@@ -128,7 +128,7 @@ and keyboard selection; it is separate from a complete removal of user data.
 | Built-in animations | 17 native effects over 2.4 GHz; five brightness/speed levels |
 | Smooth breathing | Retained native effect with seven preset colors |
 | Wheel, wheel press, other keys | Linux input remapping over USB or 2.4 GHz; Bluetooth depends on input access |
-| Key chords, media keys, horizontal/vertical scrolling | Supported by the remapping service on GNOME Wayland and X11 |
+| Key chords, media keys, horizontal/vertical scrolling | Supported by the remapping service on Linux Wayland and X11 desktops |
 | Profiles and agent CLI | Implemented; versioned JSON settings and structured results |
 | Restore app defaults | Stops both services and clears local lighting preferences and bindings |
 | Keyboard factory reset | Guided physical reset: **hold Fn + Esc for 3 seconds** |
@@ -187,22 +187,22 @@ To undo system setup, stop the services, remove
 `/etc/udev/rules.d/70-redragon-control.rules` and
 `/etc/modules-load.d/redragon-control.conf`, reload udev rules, and reconnect.
 
-### GNOME launcher
+### Desktop launcher
 
 ```bash
 ./scripts/install-user.sh
 ```
 
-This adds Redragon Control to GNOME and installs `~/.local/bin/redragonctl`.
+This adds Redragon Control to your desktop's app launcher and installs `~/.local/bin/redragonctl`.
 Keep this source directory in place; the launcher points to `run.sh` here.
 
-### Start in the GNOME tray at login
+### Start in the system tray at login
 
 The installer also enables a login autostart entry in
 `~/.config/autostart/io.github.redragon.Control.desktop`. It runs
 `redragonctl tray`, which creates an AppIndicator. Until first-run setup is
 complete, it also opens the setup window; subsequent logins stay in the tray.
-GNOME's AppIndicator extension must be enabled. The indicator uses GTK3 and
+On GNOME, its AppIndicator extension must be enabled. The indicator uses GTK3 and
 AppIndicator in its own process; settings continue to use GTK4/libadwaita.
 Fedora's indicator dependency is `libappindicator-gtk3` (already available on
 the development machine); AyatanaAppIndicator3 is also supported.
@@ -219,7 +219,7 @@ Use the menu toggles to persistently pause a service. Background preferences
 are stored beside settings in `config.background.json`, separate from profiles.
 To disable login autostart, remove the autostart desktop file or disable its
 entry in your desktop's startup-app settings. Launch manually with
-`./run.sh tray`. This runs after signing into GNOME, not before the login screen.
+`./run.sh tray`. This runs after signing into your desktop, not before the login screen.
 
 ## First use
 

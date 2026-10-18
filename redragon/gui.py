@@ -278,49 +278,10 @@ class ControlWindow(Adw.ApplicationWindow):
         self.demo_banner = Adw.Banner(title="Demo mode · Explore the interface without changing a keyboard")
         content.append(self.demo_banner)
 
-        hero_clamp = Adw.Clamp(maximum_size=1040, tightening_threshold=1040)
-        hero_clamp.set_margin_start(30)
-        hero_clamp.set_margin_end(30)
-        hero_clamp.set_margin_top(14)
-        hero_clamp.set_margin_bottom(6)
-        content.append(hero_clamp)
-        hero = _box(Gtk.Orientation.HORIZONTAL, 24)
-        hero.add_css_class("hero-card")
-        hero.set_margin_top(0)
-        hero.set_valign(Gtk.Align.START)
-        hero_clamp.set_child(hero)
-        hero_copy = _box(spacing=10)
-        for setter in (hero_copy.set_margin_top, hero_copy.set_margin_bottom, hero_copy.set_margin_start):
-            setter(24)
-        hero_copy.set_hexpand(True)
-        hero.append(hero_copy)
-        eyebrow = _label("REDRAGON CONTROL", "eyebrow")
-        eyebrow.add_css_class("accent")
-        hero_copy.append(eyebrow)
-        hero_copy.append(_label("Make it yours.", "hero-title"))
-        hero_copy.append(_label("Lighting, wheel actions, and key bindings.\nDesigned for your GNOME desktop.", "dim-label", wrap=True))
-        status_line = _box(Gtk.Orientation.HORIZONTAL, 8)
-        self.connection_pill = _label("Finding keyboard…", "status-pill")
-        status_line.append(self.connection_pill)
-        hero_copy.append(status_line)
-        preview_box = _box(spacing=0)
-        preview_box.set_hexpand(True)
-        preview_box.set_valign(Gtk.Align.CENTER)
-        preview_box.set_margin_end(18)
-        preview_box.set_margin_top(10)
-        preview_box.set_margin_bottom(12)
-        self.preview = KeyboardPreview()
-        preview_box.append(self.preview)
-        self.preview_caption = _label("LIGHTING PREVIEW · ILLUSTRATION", "keyboard-caption",
-                                      wrap=True, xalign=.5)
-        preview_box.append(self.preview_caption)
-        hero.append(preview_box)
-
         device_clamp = Adw.Clamp(maximum_size=1040, tightening_threshold=1040)
         device_clamp.set_margin_start(30)
         device_clamp.set_margin_end(30)
-        device_clamp.set_margin_top(8)
-        device_clamp.set_margin_bottom(0)
+        device_clamp.set_margin_top(14)
         content.append(device_clamp)
         device_bar = _box(Gtk.Orientation.HORIZONTAL, 10)
         device_clamp.set_child(device_bar)
@@ -348,6 +309,38 @@ class ControlWindow(Adw.ApplicationWindow):
             self.connect("close-request", self._setup_closed)
         else:
             self._refresh()
+
+    def _build_lighting_hero(self):
+        hero = _box(Gtk.Orientation.HORIZONTAL, 24)
+        hero.add_css_class("hero-card")
+        hero.set_valign(Gtk.Align.START)
+        hero_copy = _box(spacing=10)
+        for setter in (hero_copy.set_margin_top, hero_copy.set_margin_bottom, hero_copy.set_margin_start):
+            setter(24)
+        hero_copy.set_hexpand(True)
+        hero.append(hero_copy)
+        eyebrow = _label("REDRAGON CONTROL", "eyebrow")
+        eyebrow.add_css_class("accent")
+        hero_copy.append(eyebrow)
+        hero_copy.append(_label("Make it yours.", "hero-title"))
+        hero_copy.append(_label("Lighting, wheel actions, and key bindings.\nDesigned for your Linux desktop.", "dim-label", wrap=True))
+        status_line = _box(Gtk.Orientation.HORIZONTAL, 8)
+        self.connection_pill = _label("Finding keyboard…", "status-pill")
+        status_line.append(self.connection_pill)
+        hero_copy.append(status_line)
+        preview_box = _box(spacing=0)
+        preview_box.set_hexpand(True)
+        preview_box.set_valign(Gtk.Align.CENTER)
+        preview_box.set_margin_end(18)
+        preview_box.set_margin_top(10)
+        preview_box.set_margin_bottom(12)
+        self.preview = KeyboardPreview()
+        preview_box.append(self.preview)
+        self.preview_caption = _label("LIGHTING PREVIEW · ILLUSTRATION", "keyboard-caption",
+                                      wrap=True, xalign=.5)
+        preview_box.append(self.preview_caption)
+        hero.append(preview_box)
+        return hero
 
     def _build_setup(self, device_clamp):
         setup = _box(spacing=8)
@@ -390,8 +383,6 @@ class ControlWindow(Adw.ApplicationWindow):
             self.setup_pages.add_named(widget, name)
             self._setup_shared_pages.append((widget, name, title, icon))
         lighting_page = self.lighting_page
-        self.setup_preview = KeyboardPreview()
-        lighting_page.insert_child_after(self.setup_preview, lighting_page.get_first_child())
         self._setup_hidden_widgets = (self.lighting_actions, self.lighting_runtime,
                                       self.remapper_row, self.wheel_actions)
         for widget in self._setup_hidden_widgets:
@@ -534,11 +525,10 @@ class ControlWindow(Adw.ApplicationWindow):
             self.setup_pages.remove(widget)
             self.stack.add_titled_with_icon(widget, name, title, icon)
         self.stack.add_titled_with_icon(recovery, "recovery", "Recovery", "document-revert-symbolic")
-        self.setup_preview.get_parent().remove(self.setup_preview)
         self._lighting_subtitle.set_label("A little color for your everyday setup.")
         self._setup_device_clamp.get_parent().remove(self._setup_device_clamp)
         self._setup_device_parent.insert_child_after(self._setup_device_clamp,
-                                                     self._setup_device_parent.get_first_child().get_next_sibling())
+                                                     self.demo_banner)
         for widget in self._setup_hidden_widgets:
             widget.set_visible(True)
         self.root_stack.set_visible_child_name("control")
@@ -579,6 +569,7 @@ class ControlWindow(Adw.ApplicationWindow):
     def _build_lighting(self):
         page = self._page("lighting", "Lighting", "A little color for your everyday setup.", "weather-clear-night-symbolic")
         self.lighting_page = page
+        page.append(self._build_lighting_hero())
         self.rgb_note, self.rgb_note_label = self._note("Checking lighting support…")
         page.append(self.rgb_note)
         group = Adw.PreferencesGroup(title="Lighting preferences")
@@ -719,13 +710,14 @@ class ControlWindow(Adw.ApplicationWindow):
         note, _ = self._note("Export a profile from the menu before making changes you want to keep. Profiles include your lighting preferences and button bindings.")
         page.append(note)
 
-    def _run(self, function, success=None, *, refresh=True):
+    def _run(self, function, success=None, *, refresh=True, reset_editors=False):
         if self._busy:
             self._toast("Please wait for the current operation to finish.")
             return
         self._busy = True
         self.activity.set_visible(True)
         self.activity.start()
+        self.root_stack.set_sensitive(False)
         self.refresh_button.set_sensitive(False)
         if self._in_setup:
             self.setup_navigation.set_sensitive(False)
@@ -743,6 +735,7 @@ class ControlWindow(Adw.ApplicationWindow):
             self._busy = False
             self.activity.stop()
             self.activity.set_visible(False)
+            self.root_stack.set_sensitive(True)
             self.refresh_button.set_sensitive(True)
             if self._in_setup:
                 self.setup_navigation.set_sensitive(True)
@@ -750,7 +743,7 @@ class ControlWindow(Adw.ApplicationWindow):
                 self._error(error)
             else:
                 if state is not None:
-                    self._render_state(state)
+                    self._render_state(state, reset_editors=reset_editors)
                 if callable(success):
                     success(result)
                 elif success:
@@ -763,11 +756,17 @@ class ControlWindow(Adw.ApplicationWindow):
     def _refresh(self):
         self._run(self.controller.detect_keyboard if self._in_setup and self._setup_step == 0 else lambda: None)
 
-    def _render_state(self, state):
+    def _render_state(self, state, *, reset_editors=False):
         if self._in_setup:
             state = dict(state, devices=keyboard_candidates(state.get('devices', [])))
             if state.get('device') not in state['devices']:
                 state['device'] = None
+        previous_config = self.state.get("config")
+        config = state.get("config", {})
+        # Refreshing runtime status or another section must not erase drafts.
+        reset_editors = reset_editors or self._in_setup or previous_config is None
+        update_lighting = reset_editors or _lighting(previous_config) != _lighting(config)
+        previous_bindings = _bindings(previous_config or {})
         self.state = state
         self._updating = True
         try:
@@ -811,25 +810,18 @@ class ControlWindow(Adw.ApplicationWindow):
                 and capabilities.get('native_effects') else
                 "Static lighting is active · Refresh runs in the background" if lighting_running else
                 "Lighting control is stopped · The keyboard uses its onboard effect")
-            lighting = _lighting(state.get("config", {}))
-            mode = lighting.get("mode", "rainbow")
-            self.mode_dropdown.set_selected(MODES.index(mode) if mode in MODES else 0)
-            color = lighting.get("color", "#E74957")
-            if isinstance(color, str):
-                self.color_entry.set_text(color)
-                rgba = Gdk.RGBA()
-                if rgba.parse(color):
-                    self.color_button.set_rgba(rgba)
-            self.brightness_scale.set_value(lighting.get("brightness", 70))
-            self.speed_scale.set_value(lighting.get("speed", 50))
-            bindings = _bindings(state.get("config", {}))
-            for source, editor in self._binding_editors.items():
+            if update_lighting:
+                lighting = _lighting(config)
+                mode = lighting.get("mode", "rainbow")
+                self.mode_dropdown.set_selected(MODES.index(mode) if mode in MODES else 0)
+                self.color_entry.set_text(lighting.get("color", "#E74957"))
+                self.brightness_scale.set_value(lighting.get("brightness", 70))
+                self.speed_scale.set_value(lighting.get("speed", 50))
+            bindings = _bindings(config)
+            for source in self._binding_editors:
                 value = bindings.get(source, "default")
-                if value in TARGET_LABELS:
-                    editor.set_active_id(value)
-                else:
-                    editor.set_active(-1)
-                    editor.get_child().set_text(str(value))
+                if reset_editors or value != previous_bindings.get(source, "default"):
+                    self._set_binding_editor(source, value)
             self._render_custom_bindings(bindings)
             if self._in_setup:
                 self._setup_bindings = dict(bindings)
@@ -856,6 +848,14 @@ class ControlWindow(Adw.ApplicationWindow):
             self._updating = False
         self._lighting_preview_changed()
         self._update_setup_navigation()
+
+    def _set_binding_editor(self, source, value):
+        editor = self._binding_editors[source]
+        if value in TARGET_LABELS:
+            editor.set_active_id(value)
+        else:
+            editor.set_active(-1)
+            editor.get_child().set_text(str(value))
 
     def _render_custom_bindings(self, bindings):
         for row in self.custom_rows:
@@ -891,7 +891,8 @@ class ControlWindow(Adw.ApplicationWindow):
             return
         index = self.device_dropdown.get_selected()
         if index < len(self._device_ids) and self._device_ids[index]:
-            self._run(lambda: self.controller.select_device(self._device_ids[index]), "Keyboard selected")
+            device_id = self._device_ids[index]
+            self._run(lambda: self.controller.select_device(device_id), "Keyboard selected")
 
     def _lighting_preview_changed(self, *_):
         if self._updating:
@@ -942,9 +943,14 @@ class ControlWindow(Adw.ApplicationWindow):
         self.preview.configure(mode,
                                self.color_entry.get_text().strip(),
                                self.brightness_scale.get_value(), self.speed_scale.get_value())
+        rgba = Gdk.RGBA()
+        if rgba.parse(self.color_entry.get_text().strip()):
+            self._updating = True
+            try:
+                self.color_button.set_rgba(rgba)
+            finally:
+                self._updating = False
         if self._in_setup:
-            self.setup_preview.configure(mode, self.color_entry.get_text().strip(),
-                                         self.brightness_scale.get_value(), self.speed_scale.get_value())
             self._update_setup_navigation()
         color_enabled = mode == 'static'
         self.color_entry.set_sensitive(color_enabled)
@@ -1032,6 +1038,8 @@ class ControlWindow(Adw.ApplicationWindow):
                         self._error(error)
                         return
                     self._setup_bindings[source_value] = target_value
+                    if source_value in self._binding_editors:
+                        self._set_binding_editor(source_value, target_value)
                     self._render_custom_bindings(self._setup_bindings)
                 else:
                     self._run(lambda: self.controller.set_binding(source_value, target_value), "Binding saved")
@@ -1040,7 +1048,7 @@ class ControlWindow(Adw.ApplicationWindow):
         dialog.present(self)
 
     def _reset_app(self, *_):
-        self._confirm("Reset app settings?", "This stops lighting control and the live remapper, then restores this app’s local lighting preferences and bindings. Saved named profiles remain available. Keyboard firmware settings are separate.", "Reset app settings", lambda: self._run(self.controller.reset_app, "App settings restored"))
+        self._confirm("Reset app settings?", "This stops lighting control and the live remapper, then restores this app’s local lighting preferences and bindings. Saved named profiles remain available. Keyboard firmware settings are separate.", "Reset app settings", lambda: self._run(self.controller.reset_app, "App settings restored", reset_editors=True))
 
     def _factory_reset(self, *_):
         if self.state.get("capabilities", {}).get("factory_reset"):
@@ -1106,7 +1114,7 @@ class ControlWindow(Adw.ApplicationWindow):
             dialog.add_response("load", "Load profile")
             dialog.set_response_appearance("load", Adw.ResponseAppearance.SUGGESTED)
             dialog.set_close_response("cancel")
-            dialog.connect("response", lambda _dialog, response: self._run(lambda: self.controller.load_profile(profiles[selection.get_selected()]), "Profile loaded") if response == "load" else None)
+            dialog.connect("response", lambda _dialog, response: self._run(lambda: self.controller.load_profile(profiles[selection.get_selected()]), "Profile loaded", reset_editors=True) if response == "load" else None)
             dialog.present(self)
         self._run(self.controller.list_profiles, show, refresh=False)
 
@@ -1146,10 +1154,10 @@ class ControlWindow(Adw.ApplicationWindow):
         self._file_dialog(True, lambda path: self._run(lambda: self.controller.export_profile(path), "Profile exported", refresh=False))
 
     def _import_profile(self, *_):
-        self._file_dialog(False, lambda path: self._run(lambda: self.controller.import_profile(path), "Profile imported"))
+        self._file_dialog(False, lambda path: self._run(lambda: self.controller.import_profile(path), "Profile imported", reset_editors=True))
 
     def _about(self, *_):
-        dialog = Adw.AboutDialog(application_name="Redragon Control", application_icon=APP_ID, developer_name="Redragon Control contributors", version=__version__, comments="Independent keyboard controls for GNOME. Not affiliated with Redragon.")
+        dialog = Adw.AboutDialog(application_name="Redragon Control", application_icon=APP_ID, developer_name="Redragon Control contributors", version=__version__, comments="Independent keyboard controls for Linux. Not affiliated with Redragon.")
         dialog.present(self)
 
     def _toast(self, message):

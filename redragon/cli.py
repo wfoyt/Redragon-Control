@@ -10,13 +10,13 @@ from .errors import ControlError
 
 
 def parser():
-    root = argparse.ArgumentParser(prog="redragonctl", description="Manage Redragon keyboards on GNOME/Linux. Outputs JSON by default.")
+    root = argparse.ArgumentParser(prog="redragonctl", description="Manage Redragon keyboards on Linux. Outputs JSON by default.")
     root.add_argument("--version", action="version", version=__version__)
     root.add_argument("--config", help="Use a separate settings file")
     root.add_argument("--demo", action="store_true", help="Explore the UI without hardware or saved changes")
     commands = root.add_subparsers(dest="command")
     commands.add_parser("gui", help="Open the native libadwaita app")
-    tray = commands.add_parser("tray", help="Run the GNOME tray indicator without opening a settings window")
+    tray = commands.add_parser("tray", help="Run the system tray indicator without opening a settings window")
     tray.add_argument("--open-settings", action="store_true", help="Also open settings in the running tray's session")
     commands.add_parser("devices", help="List USB/HID device families without writing to them")
     commands.add_parser("status", help="Show settings, device capabilities and remapper status")

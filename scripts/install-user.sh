@@ -40,5 +40,5 @@ template = (root / 'data/io.github.redragon.Control.desktop.in').read_text()
 icon = root / 'data/io.github.redragon.Control.svg'
 if icon.exists():
     (icons / icon.name).write_bytes(icon.read_bytes())
-print(f'Installed {launcher}, GNOME launcher and tray login autostart. Keep project directory at {root}.')
+print(f'Installed {launcher}, desktop launcher and tray login autostart. Keep project directory at {root}.')
 PY

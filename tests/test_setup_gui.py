@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -160,6 +161,110 @@ class SetupGuiTests(unittest.TestCase):
         self.assertTrue(window.setup_store.completed())
         for name in ('save-profile', 'load-profile', 'import-profile', 'export-profile'):
             self.assertTrue(window.lookup_action(name).get_enabled())
+
+    def test_preview_is_only_mapped_on_lighting_in_setup_and_main(self):
+        window = self.window
+        self.assertFalse(window.preview.get_mapped())
+        window._show_setup_step(1); self.settle()
+        self.assertTrue(window.preview.get_mapped())
+        window._show_setup_step(2); self.settle()
+        self.assertFalse(window.preview.get_mapped())
+        window._finish_setup(); self.settle()
+        self.assertTrue(window.preview.get_mapped())
+        selector_ok, selector = window.device_dropdown.compute_bounds(window)
+        preview_ok, preview = window.preview.compute_bounds(window)
+        self.assertTrue(selector_ok and preview_ok)
+        self.assertLessEqual(selector.get_y() + selector.get_height(), preview.get_y())
+        for name in ('buttons', 'recovery'):
+            window.stack.set_visible_child_name(name); self.settle()
+            self.assertFalse(window.preview.get_mapped())
+            self.assertTrue(window.device_dropdown.get_mapped())
+        window.stack.set_visible_child_name('lighting'); self.settle()
+        self.assertTrue(window.preview.get_mapped())
+
+    def test_manual_color_keeps_picker_in_sync(self):
+        window = self.window
+        window.color_entry.set_text('#12AB34')
+        color = window.color_button.get_rgba()
+        self.assertAlmostEqual(color.red, 0x12 / 255)
+        self.assertAlmostEqual(color.green, 0xAB / 255)
+        self.assertAlmostEqual(color.blue, 0x34 / 255)
+        window.color_entry.set_text('#12')
+        self.assertTrue(window.color_button.get_rgba().equal(color))
+        self.assertEqual(window.color_entry.get_text(), '#12')
+
+    def test_lighting_save_preserves_unsaved_wheel_actions(self):
+        window = self.window
+        window._finish_setup(); self.settle()
+        editor = window._binding_editors['KEY_MUTE']
+        editor.set_active_id('KEY_PLAYPAUSE')
+        window.color_entry.set_text('#00ff00')
+        window._save_lighting(); self.settle()
+        self.assertEqual(window.controller._config()['lighting']['color'], '#00ff00')
+        self.assertEqual(editor.get_active_id(), 'KEY_PLAYPAUSE')
+        self.assertEqual(window.controller._config()['bindings'], {})
+
+    def test_binding_and_runtime_changes_preserve_unsaved_edits(self):
+        window = self.window
+        window._finish_setup(); self.settle()
+        editor = window._binding_editors['KEY_MUTE']
+        editor.set_active_id('KEY_PLAYPAUSE')
+        window.color_entry.set_text('#00ff00')
+        window._run(lambda: window.controller.set_binding('KEY_A', 'KEY_B')); self.settle()
+        self.assertEqual(editor.get_active_id(), 'KEY_PLAYPAUSE')
+        window._save_wheel(); self.settle()
+        self.assertEqual(window.controller._config()['bindings'],
+                         {'KEY_A': 'KEY_B', 'KEY_MUTE': 'KEY_PLAYPAUSE'})
+        window._toggle_remapper(); self.settle()
+        self.assertEqual(window.color_entry.get_text(), '#00ff00')
+        self.assertNotEqual(window.controller._config()['lighting']['color'], '#00ff00')
+
+    def test_importing_same_profile_discards_unsaved_edits(self):
+        from redragon.config import atomic_write
+        window = self.window
+        window._finish_setup(); self.settle()
+        saved = window.controller._config()
+        profile = self.path.parent / 'saved.json'
+        atomic_write(profile, saved)
+        window.color_entry.set_text('#00ff00')
+        window._binding_editors['KEY_MUTE'].set_active_id('KEY_PLAYPAUSE')
+        with patch.object(window, '_file_dialog', side_effect=lambda save, callback: callback(profile)):
+            window._import_profile(); self.settle()
+        self.assertEqual(window.color_entry.get_text(), saved['lighting']['color'])
+        self.assertEqual(window._binding_editors['KEY_MUTE'].get_active_id(), 'default')
+
+    def test_adding_wheel_binding_in_setup_updates_editor_and_saves(self):
+        from redragon.gui import Adw
+        window = self.window
+        window._show_setup_step(2)
+        dialogs = []
+        with patch.object(Adw.AlertDialog, 'present', new=lambda dialog, parent: dialogs.append(dialog)):
+            window._add_binding()
+        dialog = dialogs[0]
+        source = dialog.get_extra_child().get_first_child()
+        source.set_text('KEY_MUTE')
+        source.get_next_sibling().set_text('KEY_PLAYPAUSE')
+        dialog.emit('response', 'save')
+        self.assertEqual(window._binding_editors['KEY_MUTE'].get_active_id(), 'KEY_PLAYPAUSE')
+        window._apply_setup(); self.settle()
+        self.assertEqual(window.controller._config()['bindings'], {'KEY_MUTE': 'KEY_PLAYPAUSE'})
+
+    def test_editors_are_disabled_during_an_operation_and_restored_on_failure(self):
+        window = self.window
+        window._finish_setup(); self.settle()
+        release = threading.Event()
+        self.addCleanup(release.set)
+        def operation():
+            release.wait(2)
+            raise RuntimeError('Simulated operation failure')
+        with patch.object(window, '_error') as error:
+            window._run(operation)
+            self.assertFalse(window.device_dropdown.is_sensitive())
+            self.assertFalse(window.color_entry.is_sensitive())
+            release.set()
+            self.settle()
+        error.assert_called_once()
+        self.assertTrue(window.color_entry.is_sensitive())
 
 
 if __name__ == '__main__':

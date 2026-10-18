@@ -17,6 +17,16 @@
   <provides><binary>redragon-control</binary><binary>redragonctl</binary></provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.2" date="2026-10-18">
+      <description>
+        <p>Show the keyboard selector above the lighting preview and display the
+        preview only on the Lighting page. Update desktop wording for Linux,
+        including KDE Plasma.</p>
+        <p>Preserve unsaved lighting and wheel edits during unrelated actions,
+        synchronize the color picker with typed colors, and retain wheel
+        bindings added during setup.</p>
+      </description>
+    </release>
     <release version="0.2.1" date="2026-10-09">
       <description><p>Fix the Flatpak tray icon appearing as three dots by using the exported app icon and a host-visible icon lookup path.</p></description>
     </release>

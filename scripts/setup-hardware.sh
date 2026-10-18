@@ -35,7 +35,7 @@ ACTION=="add|change", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProd
 ACTION=="add|change", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa09", TAG+="uaccess"
 ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="010c", TAG+="uaccess"
 ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa09", TAG+="uaccess"
-# Creating virtual input is needed for remapping on GNOME Wayland.
+# Creating virtual input is needed for remapping on Linux desktops.
 ACTION=="add|change", SUBSYSTEM=="misc", KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
 RULES
 chmod 0644 /etc/udev/rules.d/70-redragon-control.rules
