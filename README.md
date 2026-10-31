@@ -1,142 +1,261 @@
-# Redragon Control
+<p align="center">
+  <img src="data/io.github.redragon.Control.svg" width="128" height="128" alt="Redragon Control app icon">
+</p>
 
-Make your keyboard feel like yours. Customize lighting, give the wheel new actions,
-and save your favorite setups in a Linux desktop app built for the
-**Redragon K686WBG-RGB-MAX**.
+<h1 align="center">Redragon Control</h1>
 
-[Download from GitHub Releases](https://github.com/wfoyt/Redragon-Control/releases)
-· [Installation](#run-the-appimage)
-· [Getting started](#getting-started)
-· [Advanced guide](docs/advanced.md)
+<p align="center">
+  Lighting, key shortcuts, and wheel controls for your Redragon K686 MAX on Linux.
+</p>
 
-![Redragon Control in Adwaita with a keyboard preview, onboard color presets, and Save to keyboard](docs/screenshots/lighting.png)
+<p align="center">
+  <a href="https://github.com/wfoyt/Redragon-Control/releases/latest">Download</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#getting-started">Getting started</a> ·
+  <a href="docs/advanced.md">Advanced guide</a>
+</p>
 
-![Redragon Control following the current Omarchy desktop palette](docs/screenshots/lighting-omarchy.png)
+![Redragon Control showing lighting options and a keyboard preview](docs/screenshots/lighting.png)
 
-*App screenshots show demo mode, so you can explore the interface without changing a keyboard.*
+Redragon Control is a Linux desktop app for the **Redragon K686WBG-RGB-MAX**.
+Choose lighting that stays saved on your keyboard, change what the wheel and
+keys do, and keep your favorite setups in reusable profiles.
 
-See the [Omarchy and onboard-lighting change report](docs/omarchy-changes.md)
-for the complete behavior changes and validation limits.
+**Before you download:** other Redragon models are not currently supported.
+Lighting changes require the **2.4 GHz USB receiver**. Key and wheel remapping
+also works over a USB cable. See [connection support](#supported-connections)
+for details.
 
-## What you can do
+## Features
 
-- **Save lighting on your keyboard.** Pick one of seven static colors, adjust
-  brightness, or turn the lights off, without background lighting traffic.
-- **Enjoy built-in animations.** Use 17 effects over the 2.4 GHz receiver, including
-  Rainbow, Smooth breathing, Raindrops, and reactive effects that respond to typing.
-- **Customize the wheel and keys.** Assign media controls, scrolling, keys, or keyboard
-  shortcuts to the wheel, wheel press, and other keys.
-- **Save your setups.** Create named profiles and import or export your lighting
-  preferences and key bindings.
-- **Match your desktop.** Automatically use the current Omarchy palette on
-  Omarchy and Adwaita elsewhere, or choose either in **Menu → Appearance**.
-- **Keep your bindings active.** Run the remapper in the background and resume
-  it after signing in. Lighting stays saved even when the app is closed.
-- **Find your way back.** Restore onboard lighting, reset app settings, or follow
-  the keyboard factory-reset guidance.
+| Feature | What you can do |
+| --- | --- |
+| **Saved keyboard lighting** | Choose seven static colors, adjust brightness, or turn the lights off. Your lighting stays on the keyboard after you quit the app. |
+| **17 built-in animations** | Pick effects such as Rainbow, Smooth breathing, Raindrops, and typing-reactive lighting. Adjust brightness and animation speed in five levels. |
+| **Wheel and key remapping** | Change wheel up, wheel down, wheel press, and other keys to media controls, scrolling, another key, or a shortcut such as Ctrl + C. You can also disable a control. |
+| **Profiles** | Save named setups, switch between them, and import or export lighting preferences and key bindings as a file. |
+| **Background controls** | Keep remapping active from the system tray, pause it when needed, and restore enabled remapping when you sign in. |
+| **Desktop appearance** | Use Adwaita or match your Omarchy desktop palette. Automatic mode chooses the appropriate appearance for your desktop. |
+| **Recovery tools** | Restore backed-up keyboard lighting, reset the app's settings, or follow the keyboard factory-reset instructions. |
+| **Demo mode and command line** | Explore the interface without changing a keyboard, or use command-line tools for setup, profiles, diagnostics, and automation. |
 
-## Run the AppImage
+The app uses native GTK 4 and libadwaita. It includes no telemetry or firmware
+flashing tools. Command-line options are covered in the [advanced guide](docs/advanced.md#cli-for-users-and-ai-agents).
 
-Download `Redragon-Control-0.2.6-x86_64.AppImage`, make it executable, and open it:
+## Installation
+
+**We recommend Gear Lever** for easy installation, an app-menu shortcut, and
+updates in one place. It manages the AppImage for you without terminal commands.
+
+### 1. Download the AppImage
+
+Open the [latest release](https://github.com/wfoyt/Redragon-Control/releases/latest)
+and download the file ending in **`x86_64.AppImage`** under **Assets**.
+The AppImage is the application; the `.zsync` and `.sha256` files are used for
+updates and download verification.
+
+You need a **64-bit x86 Linux desktop**. The AppImage includes the app's Python,
+GTK, and other application libraries, so you do not need to install them separately.
+
+### 2. Add it to Gear Lever (recommended)
+
+1. Install [Gear Lever from Flathub](https://flathub.org/apps/it.mijorus.gearlever)
+   if you do not already have it.
+2. Open Gear Lever and drag the downloaded AppImage into its window. Follow its
+   prompts to add the app to your application menu.
+3. Launch **Redragon Control** from your application menu to begin setup.
+
+Gear Lever can discover the update source included in the AppImage and offer
+new stable versions. You control when it checks for updates and installs them;
+see [Startup and updates](#startup-and-updates).
+
+<details>
+<summary>Advanced users: run the AppImage manually</summary>
+
+If you prefer to manage the file yourself, keep it in a permanent location,
+such as an `Applications` folder in your home directory. In your file manager,
+open its **Properties**, allow it to run as a program, then double-click it.
+The exact wording depends on your desktop.
+
+Alternatively, run these commands from the folder containing your download
+(replace `VERSION` with the version in its filename):
 
 ```bash
-chmod +x Redragon-Control-0.2.6-x86_64.AppImage
-./Redragon-Control-0.2.6-x86_64.AppImage
+chmod +x Redragon-Control-VERSION-x86_64.AppImage
+./Redragon-Control-VERSION-x86_64.AppImage
 ```
 
-On the first setup page, select **Enable keyboard access** and authenticate in
-your desktop's administrator prompt. The bundled helper installs device-specific
-udev rules and enables uinput; the app stays unprivileged. Reconnect the receiver
-if prompted. This requires Polkit and a working desktop authentication agent.
-No separate script download or terminal setup command is needed.
+Keep the file in that location so login startup can find it. To update manually,
+quit the app's keyboard services before replacing the image, then launch the
+new version.
 
-The x86_64 image bundles Python, GTK, libadwaita, evdev and the tray libraries.
-Normal launching keeps the tray available when Settings closes. Saved lighting
-works with the app closed; remapping requires the app. Keep the image in a stable
-location. On the first normal launch, the app enables automatic startup after
-signing in on GNOME, KDE Plasma, and Omarchy. Turn it off with **Launch at login**
-in the tray menu, or `./Redragon-Control-0.2.6-x86_64.AppImage autostart disable`.
-If FUSE is unavailable, launch with `--appimage-extract-and-run`.
+</details>
 
-When moving from Flatpak, export your profiles first and import them in the
-AppImage. Native/AppImage settings use `~/.config/redragon-control`; Flatpak
-settings stay under `~/.var/app/io.github.redragon.Control/`. Quit the previous
-app's keyboard services before switching distributions of the app.
+### 3. Enable keyboard access
 
-AppImage builds support updates through Gear Lever when the image and matching
-`.zsync` file are attached to each stable GitHub Release. See the
-[Gear Lever update instructions](docs/appimage.md#updates-through-gear-lever).
+On the first setup screen, select **Enable keyboard access** and approve your
+desktop's administrator prompt. This gives the app access to the keyboard and
+allows it to send remapped key presses. The app itself runs as your normal user.
+Reconnect the keyboard or receiver if prompted.
 
-See [AppImage build and validation notes](docs/appimage.md) and the
-[0.2.5 bug audit](docs/bug-audit-0.2.5.md).
+Your desktop needs Polkit and a working authentication agent to show this
+prompt. No separate setup script download is required for the AppImage.
+
+> **Coming from Flatpak?** Export your profiles, quit the old app's keyboard
+> services, then import the profiles in the AppImage. See the
+> [migration guide](docs/appimage.md#switching-from-flatpak).
 
 ## Getting started
 
-1. **Connect your keyboard.** Use the USB cable, or plug in the receiver and switch
-   the keyboard to **2.4G**. For wired use, set the keyboard’s mode switch to **OFF**.
-2. **Allow keyboard access.** Choose **Enable keyboard access** on the first
-   setup page and authenticate in your desktop's administrator prompt. Reconnect
-   the keyboard or receiver if access is still blocked.
-3. **Keep the app running for remapping.** The tray keeps bindings active when
-   Settings closes. Saved lighting works even after quitting the app.
-4. **Follow the setup screens.** Select your keyboard, choose lighting and wheel
-   actions, then open Redragon Control. You can also import an existing profile.
-   Use **Apply** to activate changes during setup; **Next** continues without
+1. **Connect your keyboard.** For lighting and remapping, plug in the receiver
+   and switch the keyboard to **2.4G**. For wired remapping, connect the USB
+   cable and set the keyboard's mode switch to **OFF**.
+2. **Follow the setup screens.** Select your keyboard and enable access if
+   needed. You can choose lighting and wheel actions, or import a profile.
+   **Apply** saves and activates your changes; **Next** continues without
    applying unsaved edits.
+3. **Open the app.** Select **Open Redragon Control** at the end of setup.
+   You can change your choices at any time using the steps below.
+
+### Set your lighting
+
+Open **Lighting**, choose an effect, adjust the available settings, and select
+**Save to keyboard**. Make sure the **2.4 GHz receiver** is selected.
+
+- **Static color:** choose red, green, blue, yellow, magenta, cyan, or white.
+- **Smooth breathing:** use one of the same seven colors with a gentle fade.
+- **Other animations:** choose a built-in pattern with its own onboard colors.
+  Reactive effects respond when you type.
+- **Off:** turn the keyboard lighting off.
+
+Lighting runs on the keyboard itself. You can close or quit the app after saving;
+no background lighting service is needed. The preview illustrates each effect,
+so colors and timing may differ from the physical keyboard.
+
+<details>
+<summary>See all 17 animation effects</summary>
+
+Smooth breathing · Rainbow · Flash Away · Raindrops · Rainbow Wheel ·
+Ripple Shining · Stars Twinkle · Shadow Disappear · Retro Snake · Neon Stream ·
+Reaction · Sine Wave · Retinue Scanning · Rotating Windmill · Colorful Waterfall ·
+Blossoming · Rotating Storm
+
+</details>
+
+### Change wheel and key actions
+
+Open **Buttons & wheel**, choose actions for the wheel, and select
+**Save wheel actions**. Use **+** under **Other buttons** to add key bindings.
+Select **Start remapper** to activate your bindings. Keep the keyboard's knob
+in **volume mode** when remapping its volume controls.
+
+For example, you can make the wheel scroll through a document, use its press
+for play/pause, or assign a key to a shortcut. Custom entries use Linux key
+names, such as `KEY_PLAYPAUSE` or `KEY_LEFTCTRL+KEY_C` for Ctrl + C. See the
+[binding reference](docs/advanced.md#cli-for-users-and-ai-agents) for more options.
+
+**Remapping requires the app to keep running.** Closing Settings leaves the
+system tray and remapper active. Use the tray menu to pause remapping, or choose
+**Quit and stop keyboard services** to stop it for the current session.
+Bindings are saved on your computer, rather than in the keyboard.
+
+### Save and share profiles
+
+Open the app menu to **Save Named Profile**, **Load Named Profile**,
+**Import Profile**, or **Export Profile**. Profiles contain your lighting
+preferences and key bindings, making it easy to keep separate work and gaming
+setups or move them to another installation.
+
+Loading or importing a profile updates the saved preferences. To send its
+lighting to the keyboard, select **Save to keyboard**. An active remapper
+reloads saved key bindings automatically.
+
+### Choose your appearance
+
+Open **Menu → Appearance** and choose **Automatic**, **Adwaita**, or **Omarchy**.
+Automatic follows the current Omarchy palette on Omarchy and uses Adwaita on
+other desktops. Appearance is saved separately from your keyboard profiles.
+
+<details>
+<summary>More screenshots: setup, remapping, and Omarchy appearance</summary>
+
+**Guided first-run setup**
 
 ![First-run setup detecting a Redragon K686 MAX keyboard](docs/screenshots/setup.png)
 
-In the main window, use **Lighting** to choose an effect and select **Save to keyboard**.
-Use the **2.4 GHz receiver** to save lighting; USB lighting writes are disabled
-because a persistent wired protocol has not been verified for this keyboard.
-Under **Buttons & wheel**, save your wheel actions and select **Start remapper**.
-Keep the knob in volume mode when remapping its volume controls.
-Use the app menu to save, load, import, or export profiles.
+**Buttons and wheel controls**
 
-![Buttons and wheel screen with controls for wheel up, wheel down, wheel press, and additional key bindings](docs/screenshots/buttons-and-wheel.png)
+![Wheel actions and additional key bindings in the Buttons and wheel screen](docs/screenshots/buttons-and-wheel.png)
 
-Closing Settings leaves the remapper running. Use the tray menu to pause it,
-or choose **Quit and stop keyboard services** to stop it for the current session.
-Lighting remains saved on the keyboard. On GNOME, an AppIndicator extension is
-needed to show the tray icon; the remapper can still run without it.
+**Omarchy desktop appearance**
 
-## Supported keyboards and connections
+![Redragon Control following the current Omarchy desktop palette](docs/screenshots/lighting-omarchy.png)
 
-This app supports the **Redragon K686WBG-RGB-MAX**. Other Redragon models are not
-currently supported.
+</details>
+
+*Screenshots use demo mode, which lets you explore without changing a keyboard.*
+
+## Supported connections
+
+Support is specific to the **Redragon K686WBG-RGB-MAX**. Similar model names or
+shared USB identifiers do not guarantee compatibility.
 
 | Feature | USB cable | 2.4 GHz receiver | Bluetooth |
 | --- | --- | --- | --- |
-| Save static preset, brightness, and lights off | Not supported | Yes | Not supported |
-| Built-in lighting animations | Not supported | Yes — 17 effects | Not supported |
-| Wheel and key remapping | Yes | Yes | Depends on Linux input access |
+| Save static color, brightness, or lights off | Not supported | Supported | Not supported |
+| Save built-in lighting animations | Not supported | Supported — 17 effects | Not supported |
+| Remap wheel and keys | Supported | Supported | Depends on Linux input access |
 
-Key bindings work while the remapper is running on your computer; they are not
-saved to the keyboard. Some **Fn** combinations are handled by the keyboard
-itself and cannot be remapped. The lighting preview illustrates effects; actual
-keyboard colors and timing may differ.
+USB lighting writes are disabled because a reliable way to save lighting over
+the cable has not been verified. Use the receiver for all lighting changes.
+Some **Fn** combinations are handled inside the keyboard and cannot be remapped.
+For switching remapping between cable and receiver, see
+[connection linking](docs/advanced.md#first-use).
 
-Static and Smooth breathing offer red, green, blue, yellow, magenta, cyan and
-white. Brightness and animation speed use five levels. Old custom static colors
-migrate to the nearest preset. Modes that require continuous host streaming have
-been removed. Applied lighting is backed up and verified by reading it back;
-**Restore previous lighting** explicitly restores that backup.
+## Startup and updates
 
-## Need help?
+The first normal launch enables **Launch at login** on GNOME, KDE Plasma, and
+Omarchy. After setup, the app starts in the tray and restores enabled remapping
+when you sign in. Turn this off using **Launch at login** in the tray menu.
+Quitting the app stops services for the current session; use the remapping toggle
+to keep remapping disabled across logins.
 
-- **Keyboard not detected?** Check the connection and mode switch, reconnect it,
-  and retry detection. If access is missing, follow the hardware setup prompt.
-- **Animations unavailable?** Select the receiver and use **2.4G** mode.
-  Wired USB supports static color and lights off.
-- **Want the keyboard’s previous lighting?** Choose **Restore previous lighting**
-  with the receiver selected.
-- **Want to reset your changes?** Open **Recovery → Reset app settings**.
-  Saved named profiles are kept. Export a profile first if you want a backup.
-- **Need a keyboard factory reset?** Stop the app’s services, then hold
-  **Fn + Esc for 3 seconds**. The Recovery page also provides guidance.
+**Gear Lever is the recommended way to manage updates.** Open it to check for
+new versions of Redragon Control. AppImage builds include an update source that
+Gear Lever can discover and use to offer stable releases, without requiring you
+to enter an update URL. You control update checking and installation in Gear Lever. Older images without this metadata need one manual update or a
+one-time update-source configuration. See the
+[Gear Lever update guide](docs/appimage.md#updates-through-gear-lever).
 
-For source installation, command-line controls, AppImage builds, troubleshooting,
-and development details, see the [advanced guide](docs/advanced.md).
-Hardware protocol details are in [protocol notes](docs/protocol.md).
+Before replacing the AppImage, choose **Quit and stop keyboard services**,
+then open the updated image afterward.
 
-Independent software, not affiliated with Redragon.
+## Troubleshooting and recovery
+
+| Problem or task | What to do |
+| --- | --- |
+| **Keyboard not detected** | Check the cable or receiver and mode switch, reconnect, then retry detection. Use **Enable keyboard access** if the setup screen reports missing permissions. |
+| **Lighting controls unavailable** | Select the receiver and switch to **2.4G**. Lighting changes are unavailable over USB cable and Bluetooth. |
+| **Bindings are not working** | Select **Start remapper**, check that the correct connection is selected, and keep the knob in volume mode for volume-control bindings. |
+| **No tray icon on GNOME** | An AppIndicator extension is needed to display it. Remapping can still run without a visible tray icon. |
+| **AppImage reports a FUSE error** | Run `./Redragon-Control-VERSION-x86_64.AppImage --appimage-extract-and-run`, replacing `VERSION` with your download's version. |
+| **Restore the original lighting** | Select the receiver and choose **Restore previous lighting**. This restores the configuration backed up before the app's first lighting save. |
+| **Reset app preferences** | Open **Recovery → Reset app settings**. This stops services and clears local lighting preferences and bindings. Named profiles and lighting already saved on the keyboard are kept. |
+| **Factory-reset the keyboard** | Stop the app's keyboard services, then hold **Fn + Esc for 3 seconds**. The Recovery page also provides guidance. |
+
+If remapping ever leaves input unusable, unplug and reconnect the keyboard.
+For further help, read the [advanced guide](docs/advanced.md) or
+[open an issue](https://github.com/wfoyt/Redragon-Control/issues).
+
+## Documentation
+
+- [Advanced guide](docs/advanced.md) — source installation, demo mode, command-line tools, profiles, and detailed troubleshooting.
+- [AppImage guide](docs/appimage.md) — builds, updates, migration, and release validation.
+- [Hardware protocol notes](docs/protocol.md) — device checks, lighting commands, and implementation details.
+- [Release notes](docs/releases/0.2.6.md) — changes in version 0.2.6.
+
+## License
+
+Redragon Control is available under the [MIT License](LICENSE).
+It is independent software and is not affiliated with or endorsed by Redragon.
