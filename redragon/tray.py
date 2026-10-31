@@ -1,12 +1,10 @@
 """GTK3 AppIndicator host. Settings stay in a separate GTK4 process."""
 
 import hashlib
-from configparser import ConfigParser
 import logging
 from pathlib import Path
 import signal
 import subprocess
-import sys
 import threading
 
 import gi
@@ -23,6 +21,7 @@ from gi.repository import Gio, GLib, Gtk
 from .background import BackgroundStore, BackgroundSupervisor
 from .core import Controller
 from .setup import SetupStore
+from .runtime import python_command
 
 
 class TrayApplication(Gtk.Application):
@@ -54,18 +53,8 @@ class TrayApplication(Gtk.Application):
             return
         self.hold()
         icon = str(Path(__file__).resolve().parent.parent / "data/io.github.redragon.Control.svg")
-        flatpak = ConfigParser()
-        flatpak.read("/.flatpak-info")
-        if flatpak.has_section("Application"):
-            # The tray host runs outside the sandbox and cannot read /app.
-            # Flatpak exports this themed icon for the host desktop to resolve.
-            icon = "io.github.redragon.Control"
         self.indicator = AppIndicator.Indicator.new(
             "redragon-control", icon, AppIndicator.IndicatorCategory.HARDWARE)
-        app_path = flatpak.get("Instance", "app-path", fallback=None)
-        if app_path:
-            # Also support hosts whose theme search path omits Flatpak exports.
-            self.indicator.set_icon_theme_path(str(Path(app_path) / "share/icons/hicolor/scalable/apps"))
         self.indicator.set_title("Redragon Control")
         self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
         menu = Gtk.Menu()
@@ -77,12 +66,17 @@ class TrayApplication(Gtk.Application):
         menu.append(settings)
         menu.append(Gtk.SeparatorMenuItem())
         self.toggles = {}
-        for kind, label in (("remap", "Keep button remapping active"), ("rgb", "Keep keyboard lighting active")):
+        for kind, label in (("remap", "Keep button remapping active"),):
             item = Gtk.CheckMenuItem(label=label)
             item.connect("toggled", self.toggle, kind)
             menu.append(item)
             self.toggles[kind] = item
         menu.append(Gtk.SeparatorMenuItem())
+        from . import autostart
+        startup = Gtk.CheckMenuItem(label="Launch at login")
+        startup.set_active(autostart.enabled())
+        startup.connect("toggled", self.toggle_autostart)
+        menu.append(startup)
         quit_item = Gtk.MenuItem(label="Quit and stop keyboard services")
         quit_item.connect("activate", self.request_quit)
         menu.append(quit_item)
@@ -98,7 +92,7 @@ class TrayApplication(Gtk.Application):
     def open_settings(self, *_):
         # GTK4's unique application instance raises an existing settings window.
         self.settings_process = subprocess.Popen(
-            [sys.executable, "-m", "redragon", "--config", str(self.controller.store.path), "gui"],
+            python_command() + ["-m", "redragon", "--config", str(self.controller.store.path), "gui"],
             start_new_session=True)
 
     def toggle(self, item, kind):
@@ -109,6 +103,13 @@ class TrayApplication(Gtk.Application):
             self.supervisor.retry_after[kind] = 0
             self.refresh()
         except Exception as exc:
+            self.status_item.set_label(str(exc)[:100])
+
+    def toggle_autostart(self, item):
+        try:
+            from .autostart import set_enabled
+            set_enabled(item.get_active())
+        except OSError as exc:
             self.status_item.set_label(str(exc)[:100])
 
     def refresh(self):
@@ -136,8 +137,7 @@ class TrayApplication(Gtk.Application):
             message = "Waiting for selected keyboard"
         else:
             remap = "active" if state["daemon"]["running"] else "waiting" if desired["remap"] else "paused"
-            rgb = "active" if state["lighting_daemon"]["running"] else "waiting" if desired["rgb"] else "onboard"
-            message = f"Remapping: {remap} · Lighting: {rgb}"
+            message = f"Remapping: {remap} · Lighting: onboard"
             if self.supervisor.errors:
                 message = "Needs attention: " + next(iter(self.supervisor.errors.values()))
         if (error or self.supervisor.errors) and message != self.last_error:
@@ -146,8 +146,8 @@ class TrayApplication(Gtk.Application):
         self.status_item.set_label(message[:130])
         if desired is not None:
             self.updating = True
-            for kind, enabled in desired.items():
-                self.toggles[kind].set_active(enabled)
+            for kind, item in self.toggles.items():
+                item.set_active(desired[kind])
             self.updating = False
         return GLib.SOURCE_REMOVE
 

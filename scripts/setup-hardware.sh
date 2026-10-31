@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Standalone host setup, also exported by the Flatpak. Never run the app as root.
+# Standalone host setup, bundled in the AppImage. Never run the app as root.
 set -Eeuo pipefail
 task_step='starting hardware setup'
 trap 'echo "Redragon setup could not finish while $task_step. Nothing is ready yet. Fix the problem shown above, then run this script again with sudo. The app will check access before opening." >&2' ERR

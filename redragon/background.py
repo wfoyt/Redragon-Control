@@ -45,6 +45,10 @@ class BackgroundSupervisor:
 
     def tick(self):
         desired = self.preferences.read()
+        # Migrate old installs away from lighting keepalives. Saved lighting
+        # survives logout and must never be rewritten on a timer or at login.
+        if desired['rgb']:
+            desired = self.preferences.set('rgb', False)
         state = self.controller.status()
         for kind, status_key in (("remap", "daemon"), ("rgb", "lighting_daemon")):
             running = state[status_key]["running"]

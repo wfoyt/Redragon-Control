@@ -1,4 +1,4 @@
-"""K686 MAX onboard effects, with verified read-back and durable recovery."""
+"""K686 MAX saved lighting, with verified read-back and explicit recovery."""
 import json
 import os
 from pathlib import Path
@@ -35,20 +35,23 @@ def effect_frames(original, settings):
     """Preserve all fields except effect ID and its two parameter bytes."""
     validate_frames(original)
     mode = settings['mode']
-    if mode not in NATIVE_EFFECTS:
+    if mode not in (*NATIVE_EFFECTS, 'static', 'off'):
         raise ControlError('Select a built-in K686 lighting effect.')
     color = settings['color'].lower()
-    if mode == 'smooth-breathing' and color not in NATIVE_COLORS:
-        raise ControlError('Smooth breathing requires one of the seven preset colors.')
+    if mode in ('static', 'smooth-breathing') and color not in NATIVE_COLORS:
+        raise ControlError('Saved lighting requires one of the seven preset colors.')
     frames = [bytearray(frame) for frame in original]
-    effect_id = NATIVE_EFFECTS[mode][0]
+    # Selection 1 is the onboard static effect. Zero brightness implements Off
+    # using the same known lighting fields, without a new command or palette.
+    effect_id = 1 if mode in ('static', 'off') else NATIVE_EFFECTS[mode][0]
     page, offset = parameter_location(effect_id)
     frames[0][15] = effect_id
-    frames[page][offset] = round(settings['brightness'] * 4 / 100)
-    speed = round(settings['speed'] * 4 / 100)
-    # Preserve each built-in effect's onboard color/variant flags. Only the
-    # retained Smooth breathing control explicitly selects a preset color.
-    flags = NATIVE_COLORS.index(color) if mode == 'smooth-breathing' else original[page][offset + 1] & 15
+    frames[page][offset] = 0 if mode == 'off' else round(settings['brightness'] * 4 / 100)
+    speed = (original[page][offset + 1] >> 4 if mode in ('static', 'off')
+             else round(settings['speed'] * 4 / 100))
+    # Preserve animation color/variant flags. Static and Smooth breathing
+    # explicitly select one of the onboard preset slots.
+    flags = NATIVE_COLORS.index(color) if mode in ('static', 'smooth-breathing') else original[page][offset + 1] & 15
     frames[page][offset + 1] = speed << 4 | flags
     for frame in frames:
         frame[-1] = sum(frame[:-1]) & 255
@@ -115,7 +118,7 @@ class NativeLighting:
         self._send_acknowledged(wireless_packet(0x0a, 1, payload=bytes((4, 7))), save=True)
         actual = self.read()
         if [r[4:19] for r in actual] != [r[4:19] for r in frames]:
-            raise ControlError('Onboard lighting read-back did not match. Original settings will be restored.')
+            raise ControlError('Onboard lighting read-back did not match. Previous settings will be restored.')
 
     def _original(self):
         try:
@@ -129,25 +132,65 @@ class NativeLighting:
             raise ControlError(f'Cannot read native lighting recovery backup: {exc}') from exc
 
     def apply(self, settings):
-        key = (settings['mode'], settings['color'].lower() if settings['mode'] == 'smooth-breathing' else None,
-               round(settings['brightness'] * 4 / 100), round(settings['speed'] * 4 / 100))
+        mode = settings['mode']
+        key = (mode, settings['color'].lower() if mode in ('static', 'smooth-breathing') else None,
+               0 if mode == 'off' else round(settings['brightness'] * 4 / 100),
+               round(settings['speed'] * 4 / 100) if mode in NATIVE_EFFECTS else None)
         if key == self.last_settings:
             return
+        self.recover()
+        current = self.read()
+        desired = effect_frames(current, settings)
         if not self.path.exists():
-            original = self.read()
             # Persist the verified original before the first hardware write.
-            atomic_write(self.path, {'device_id': self.device_id, 'frames': [r.hex() for r in original]})
-        original = self._original()
+            atomic_write(self.path, {'device_id': self.device_id, 'frames': [r.hex() for r in current],
+                                     'committed': False})
+        self._original()  # Verify backup ownership before any hardware write.
+        saved = json.loads(self.path.read_text())
+        saved['previous_committed'] = saved.get('committed', False)
+        saved['rollback_frames'] = [r.hex() for r in current]
+        saved['committed'] = False
+        atomic_write(self.path, saved)
         try:
-            self.write(effect_frames(original, settings))
+            if desired != current:
+                self.write(desired)
+            saved.update(committed=True, lighting=dict(settings))
+            saved.pop('rollback_frames', None)
+            saved.pop('previous_committed', None)
+            atomic_write(self.path, saved)
         except Exception:
-            self.restore()
+            self.recover()
             raise
         self.last_settings = key
 
+    def recover(self):
+        """Recover an interrupted transaction, never undo a completed save."""
+        if self.path.exists():
+            original = self._original()
+            saved = json.loads(self.path.read_text())
+            if not saved.get('committed', False):
+                try:
+                    rollback = validate_frames([bytes.fromhex(frame) for frame in saved['rollback_frames']]) if 'rollback_frames' in saved else original
+                except (ValueError, TypeError) as exc:
+                    raise ControlError(f'Cannot read interrupted lighting transaction: {exc}') from exc
+                self.write(rollback)
+                if saved.get('previous_committed', False):
+                    saved['committed'] = True
+                    saved.pop('rollback_frames', None)
+                    saved.pop('previous_committed', None)
+                    atomic_write(self.path, saved)
+                else:
+                    self.path.unlink()
+                self.last_settings = None
+
     def restore(self):
         if self.path.exists():
-            self.write(self._original())
+            original = self._original()
+            saved = json.loads(self.path.read_text())
+            saved.update(committed=False, previous_committed=False,
+                         rollback_frames=[r.hex() for r in original])
+            atomic_write(self.path, saved)
+            self.write(original)
             self.path.unlink()
         self.last_settings = None
 

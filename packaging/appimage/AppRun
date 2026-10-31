@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APPDIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+export REDRAGON_APPIMAGE_LAUNCHER="$APPDIR/AppRun"
+export PYTHONHOME="$APPDIR/usr"
+export PYTHONPATH="$APPDIR/lib/redragon-control"
+export GI_TYPELIB_PATH="$APPDIR/lib/girepository-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/girepository-1.0"
+export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
+export XDG_DATA_DIRS="$APPDIR/share:$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export FONTCONFIG_FILE="$APPDIR/fonts.conf"
+export GSK_RENDERER="${GSK_RENDERER:-cairo}"
+if [[ "${1:-}" == --python ]]; then
+  shift
+else
+  set -- -m redragon.appimage_entry "$@"
+fi
+exec "$APPDIR/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2" --library-path "$APPDIR/lib:$APPDIR/usr/lib/x86_64-linux-gnu:$APPDIR/usr/lib" "$APPDIR/usr/bin/python3" -P "$@"

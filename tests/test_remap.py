@@ -133,15 +133,38 @@ class MappingTests(unittest.TestCase):
             self.key(mapper, 115, value)
         self.assertEqual(self.output.events, [(2, 6, -1), (2, 12, -120)] * 2)
 
-    def test_reload_releases_and_suppresses_old_held_key(self):
+    def test_reload_preserves_press_time_action_until_release(self):
         mapper = self.mapper({"KEY_VOLUMEUP": "KEY_A"})
         self.key(mapper, 115, 1)
         mapper.update_bindings({"KEY_VOLUMEUP": "KEY_B"})
+        self.assertNotIn((1, 30, 0), self.output.events)
         self.key(mapper, 115, 2)
         self.key(mapper, 115, 0)
         self.assertNotIn((1, 48, 1), self.output.events)
         self.key(mapper, 115, 1)
         self.assertEqual(self.output.events[-1], (1, 48, 1))
+
+    def test_wheel_binding_reload_does_not_swallow_typing_or_release_ctrl(self):
+        mapper = self.mapper({'KEY_VOLUMEUP': 'KEY_A'})
+        self.key(mapper, 29, 1)
+        self.key(mapper, 30, 1)
+        mapper.update_bindings({'KEY_VOLUMEUP': 'KEY_B'})
+        self.assertEqual(self.output.events, [(1, 29, 1), (1, 30, 1)])
+        self.key(mapper, 30, 2)
+        self.key(mapper, 30, 0)
+        self.key(mapper, 29, 0)
+        self.assertEqual(self.output.events[-3:], [(1, 30, 2), (1, 30, 0), (1, 29, 0)])
+
+    def test_syn_dropped_restores_unmapped_held_modifiers(self):
+        mapper = self.mapper({'KEY_VOLUMEUP': 'KEY_A'})
+        self.key(mapper, 29, 1)
+        mapper.process('keyboard', event(0, 3, 0))
+        device = Mock()
+        device.active_keys.return_value = [29]
+        mapper.process('keyboard', event(0, 0, 0), device)
+        self.assertEqual(mapper.held[('keyboard', 29)], (29,))
+        self.key(mapper, 29, 0)
+        self.assertEqual(self.output.events[-1], (1, 29, 0))
 
     def test_invalid_reload_preserves_existing_held_mapping(self):
         mapper = self.mapper({"KEY_VOLUMEUP": "KEY_A"})
@@ -257,6 +280,28 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(observed, [True])
         self.assertTrue(all(device.ungrabbed and device.closed for device in self.devices))
         self.assertTrue(self.output.closed)
+
+    def test_wheel_only_remapping_never_grabs_the_typing_interface(self):
+        self.devices[0].capabilities = lambda **_: {1: [30, 48, 29]}
+        self.devices[1].capabilities = lambda **_: {1: [113, 114, 115]}
+        stop = threading.Event()
+        def ready():
+            self.assertFalse(self.devices[0].grabbed)
+            self.assertTrue(self.devices[1].grabbed)
+            stop.set()
+        remap.RemapDaemon(self.path, stop, ready).run()
+        self.assertFalse(self.devices[0].ungrabbed)
+        self.assertTrue(all(device.closed for device in self.devices))
+
+    def test_new_binding_on_a_different_interface_rebuilds_grabs(self):
+        self.devices[0].capabilities = lambda **_: {1: [30, 48, 29]}
+        self.devices[1].capabilities = lambda **_: {1: [113, 114, 115]}
+        old = {'version': 1, 'device_id': self.selected['id'], 'bindings': {'KEY_VOLUMEUP': 'KEY_A'}}
+        self.write({'KEY_A': 'KEY_B', 'KEY_VOLUMEUP': 'KEY_A'})
+        replacement = remap.RemapDaemon(self.path)._session(self.module, old)
+        self.assertEqual(replacement['bindings']['KEY_A'], 'KEY_B')
+        self.assertFalse(self.devices[0].grabbed)
+        self.assertTrue(self.devices[1].ungrabbed)
 
     def test_identity_profile_watches_without_input_grabs(self):
         self.write({"KEY_VOLUMEUP": "KEY_VOLUMEUP", "KEY_MUTE": "default"})

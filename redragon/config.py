@@ -14,11 +14,20 @@ from .errors import ControlError
 DEFAULTS = {
     "version": 1,
     "device_id": None,
-    "lighting": {"mode": "static", "color": "#e01b24", "brightness": 70, "speed": 50},
+    "lighting": {"mode": "static", "color": "#ff0000", "brightness": 75, "speed": 50},
     "bindings": {},
 }
 from .effects import MODES
 NATIVE_COLORS = ("#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#ffffff")
+
+
+def nearest_native_color(color):
+    rgb = tuple(int(color[i:i + 2], 16) for i in (1, 3, 5))
+    return min(NATIVE_COLORS, key=lambda candidate: sum(
+        (channel - int(candidate[i:i + 2], 16)) ** 2
+        for channel, i in zip(rgb, (1, 3, 5))))
+
+
 SCROLL_SOURCES = {"REL_WHEEL_UP", "REL_WHEEL_DOWN", "REL_HWHEEL_LEFT", "REL_HWHEEL_RIGHT"}
 SPECIAL_TARGETS = {"default", "disabled", "scroll-up", "scroll-down", "scroll-left", "scroll-right"}
 # Linux's stable symbolic input key names; generated from input-event-codes.h.
@@ -57,18 +66,23 @@ def validate_config(value):
         # Migrate profiles from the removed software effect.
         light['mode'] = 'smooth-breathing'
         if isinstance(light['color'], str) and re.fullmatch(r'#[0-9a-fA-F]{6}', light['color']):
-            rgb = [int(light['color'][i:i + 2], 16) for i in (1, 3, 5)]
-            light['color'] = min(NATIVE_COLORS, key=lambda c: sum(
-                (a - int(c[i:i + 2], 16)) ** 2 for a, i in zip(rgb, (1, 3, 5))))
+            light['color'] = nearest_native_color(light['color'])
     if light["mode"] not in MODES:
         raise ControlError(f"Lighting mode must be one of {', '.join(MODES)}.")
     if not isinstance(light["color"], str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", light["color"]):
         raise ControlError("Color must be a hex RGB color, for example #e01b24.")
     if light['mode'] == 'smooth-breathing' and light['color'].lower() not in NATIVE_COLORS:
         raise ControlError('Smooth breathing uses preset colors: ' + ', '.join(NATIVE_COLORS))
+    if light['mode'] == 'static':
+        # Old direct-mode profiles could name arbitrary colors. Only the seven
+        # onboard presets are supported now; migration never starts streaming.
+        light['color'] = nearest_native_color(light['color'])
     for field in ("brightness", "speed"):
         if type(light[field]) is not int or not 0 <= light[field] <= 100:
             raise ControlError(f"{field.capitalize()} must be an integer from 0 to 100.")
+    light['brightness'] = round(light['brightness'] / 25) * 25
+    if light['mode'] not in ('static', 'off'):
+        light['speed'] = round(light['speed'] / 25) * 25
     bindings = value.get("bindings")
     if not isinstance(bindings, dict) or len(bindings) > 256:
         raise ControlError("Bindings must be an object containing at most 256 entries.")

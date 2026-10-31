@@ -1,8 +1,9 @@
-"""Model-gated direct RGB and onboard effects for the K686 MAX.
+"""Model-gated onboard lighting for the K686 MAX.
 
 Native effects use the verified wireless configuration transaction with recovery.
 There is no guessed factory-reset or firmware command.
-See docs/protocol.md for provenance and the keepalive requirement.
+Direct frame encoders remain preview/diagnostic helpers only. No application
+operation streams frames to the keyboard.
 """
 
 from __future__ import annotations
@@ -103,17 +104,6 @@ def wireless_packet(command, pages=0, sequence=0, payload=b""):
     packet[4:4 + len(payload)] = payload
     packet[-1] = sum(packet[:-1]) & 255
     return bytes(packet)
-
-
-def wireless_frames(settings):
-    """Volatile audio/direct RGB: grouped colors, no flash/config commands."""
-    rgb = direct_packet(settings)[8:11]
-    if rgb == b"\0\0\0":
-        return [wireless_packet(0x88, 1, 0, b"\x23")]
-    data = rgb + bytes((LED_COUNT,)) + bytes(range(LED_COUNT))
-    chunks = [data[i:i + 14] for i in range(0, len(data), 14)]
-    return [wireless_packet(0x88, len(chunks), i, bytes((0x10 + len(chunk),)) + chunk)
-            for i, chunk in enumerate(chunks)]
 
 
 class _FeatureDevice:
@@ -257,14 +247,10 @@ class LightingBackend:
 
     def close(self) -> None:
         if self._session is not None:
-            try:
-                if self._native is not None:
-                    self._native.restore()
-            finally:
-                self._session.__exit__(None, None, None)
-                self._session = None
-                self._model_id = None
-                self._native = None
+            self._session.__exit__(None, None, None)
+            self._session = None
+            self._model_id = None
+            self._native = None
 
     def __del__(self):
         try:
@@ -276,24 +262,25 @@ class LightingBackend:
         wired = bool(self.device) and (
             self.device.get("vendor_id"), self.device.get("product_id")
         ) == WIRED_ID
-        supported = wired or self._wireless
+        supported = self._wireless
+        from .effects import MODES
         return {
             "rgb": supported,
             "factory_reset": False,
             "remap": False,
-            "modes": list(DIRECT_MODES) + list(NATIVE_EFFECTS) if self._wireless else list(DIRECT_MODES) if supported else [],
+            "modes": list(MODES) if supported else [],
             "native_breathing": self._wireless,
             "native_effects": self._wireless,
-            "hardware_modes": list(NATIVE_EFFECTS) if self._wireless else [],
+            "hardware_modes": list(MODES) if supported else [],
             "software_modes": [],
             "software_effects": False,
-            "keepalive_required": supported,
-            "requires_model_verification": supported,
+            "keepalive_required": False,
+            "requires_model_verification": wired or self._wireless,
             "wireless": self._wireless,
             "message": (
-                "Built-in animations run on the keyboard. Static color and Off use the background lighting service. Original onboard settings are backed up and restored when stopped."
+                "Lighting is saved on the keyboard over 2.4 GHz. Static and breathing use seven preset colors and five brightness levels. No background lighting traffic is needed."
                 if self._wireless else
-                "Static color and Off are available over USB. Use the 2.4 GHz receiver for built-in animations; the wired native write protocol remains unverified."
+                "Use the K686 MAX 2.4 GHz receiver to save onboard lighting. Wired saved lighting is not verified; host streaming has been removed to protect typing. USB remapping is still available."
                 if wired else "Select the K686 USB keyboard or its 2.4 GHz receiver for RGB control."
             ),
             "factory_reset_instructions": FACTORY_RESET_INSTRUCTIONS,
@@ -348,7 +335,7 @@ class LightingBackend:
 
     def probe(self) -> dict:
         """Query model identity without sending a colour or configuration change."""
-        if not self.capabilities()["rgb"]:
+        if not self.capabilities()["requires_model_verification"]:
             raise ControlError(self.capabilities()["message"])
         try:
             if self._session is None:
@@ -358,44 +345,38 @@ class LightingBackend:
                     "response_header": error.response_header, "lighting_written": False,
                     "message": str(error)}
         return {"supported": True, "model_id": self._model_id,
-                "backend": "compx-wireless-direct" if self._wireless else "sinowealth-wired-direct", "lighting_written": False}
+                "backend": "compx-wireless-onboard" if self._wireless else "sinowealth-wired-probe", "lighting_written": False}
 
     def apply(self, settings: dict) -> dict:
-        if self._native is not None and self._native.path.exists():
-            self._native.restore()
-        packet = direct_packet(settings)  # Validate fully before opening a device.
-        if not self.capabilities()["rgb"]:
-            raise ControlError(self.capabilities()["message"])
-        if self._session is None:
-            self._open_verified()
-        try:
-            if self._wireless:
-                for report in wireless_frames(settings):
-                    self._session.send_output(report)
-            else:
-                self._session.send(packet)
-        except (OSError, ControlError) as error:
-            self.close()
-            raise ControlError(f"RGB connection failed: {error}") from error
-        return {
-            "applied": True,
-            "backend": "compx-wireless-direct" if self._wireless else "sinowealth-wired-direct",
-            "model_id": self._model_id,
-            "mode": settings.get("mode", "static"),
-            "transient": True,
-            "keepalive_required": True,
-        }
+        raise ControlError("Host-streamed lighting has been removed. Apply saved onboard lighting through the 2.4 GHz receiver instead.")
 
     def recover_native(self, config_path):
         from .native_lighting import backup_path
         if self._wireless and backup_path(config_path).exists():
             self._native = self._native_session(config_path)
-            self._native.restore()
+            self._native.recover()
 
     def apply_native(self, settings, config_path):
-        if self._native is None:
-            self._native = self._native_session(config_path)
-        self._native.apply(settings)
+        from .config import ConfigStore
+        from .native_lighting import backup_path
+        with ConfigStore(backup_path(config_path)).lock():
+            if self._native is None:
+                self._native = self._native_session(config_path)
+            self._native.apply(settings)
+        return {'applied': True, 'saved_on_keyboard': True, 'keepalive_required': False,
+                'mode': settings['mode'], 'backend': 'compx-wireless-onboard',
+                'model_id': self._model_id}
+
+    def restore_native(self, config_path):
+        from .config import ConfigStore
+        from .native_lighting import backup_path
+        with ConfigStore(backup_path(config_path)).lock():
+            if not backup_path(config_path).exists():
+                return {'restored': False, 'message': 'No previous lighting backup is available.'}
+            if self._native is None:
+                self._native = self._native_session(config_path)
+            self._native.restore()
+        return {'restored': True, 'keepalive_required': False}
 
     def _native_session(self, config_path):
         from .native_lighting import NativeLighting

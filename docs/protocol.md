@@ -13,7 +13,7 @@ chipset IDs. A matching VID/PID alone is insufficient authorization for RGB
 commands. The implementation verifies the firmware model each time the device
 is opened, and retains that same file descriptor for subsequent daemon frames.
 
-## Wired direct RGB
+## Former wired direct RGB (removed from device control)
 
 The implementation independently encodes protocol facts from OpenRGB revision
 [`deeecd3ba6e8a4b085870766e312699425f8806b`](https://github.com/CalcProgrammer1/OpenRGB/tree/deeecd3ba6e8a4b085870766e312699425f8806b).
@@ -40,10 +40,9 @@ run through 112, so this app fills 113 triplets with the requested uniform
 colour, scaled to the requested brightness. Off uses black triplets.
 
 This mode is **volatile and needs a keepalive**. OpenRGB refreshes it after
-one second. The local daemon must continue sending frames while active.
-Stopping the daemon lets the keyboard return to its onboard lighting.
-This direct path is used only for Static color and Off. The former
-software-generated animations have been removed from device control.
+one second. This app no longer sends direct RGB: the required background
+traffic could interfere with input. The pure packet/preview helpers remain
+for historical format coverage; hardware operations reject host streaming.
 
 The user's wired K686 MAX was observed read-only as `258a:010c`, with physical
 connection `usb-0000:02:00.0-4`. Its keyboard interface has no Feature Report 6;
@@ -60,7 +59,7 @@ service also started and stopped against the real composite event interfaces.
 Bluetooth RGB, on-device remapping, and a software factory reset remain
 unsupported until their commands are verified for this model.
 
-## 2.4 GHz direct RGB
+## Former 2.4 GHz direct RGB (removed)
 
 The receiver uses a different protocol: 20-byte Output Report `13`, rather
 than the wired 520-byte Feature Report. Protocol facts were independently
@@ -83,9 +82,9 @@ Direct frames use command `88`. A uniform color is encoded as
 `13 88 fragment-count sequence length`, where length is `10` hex plus the
 fragment's byte count; data starts at byte 5 and the checksum is byte 19.
 Black/off uses the documented single idle frame starting `13 88 01 00 23`.
-Static/off refresh at 20 Hz. The earlier software animation stream was replaced
-with native effects after the user observed visible stepping. Direct streaming issues no persistent
-configuration, flash, reset, or firmware-write commands.
+Static/off previously refreshed at 20 Hz, producing 180 reports per second
+for a static color. This stream and its fragment encoder have been removed.
+The historical tests below establish device identity, not current streaming support.
 
 On 2026-10-09, the user's receiver `3554:fa09`, at physical connection
 `usb-0000:0d:00.3-3`, answered the exact model query above and accepted the
@@ -104,8 +103,11 @@ with K686-specific preservation and exact-model verification. The official
 K686 `KB.ini` and `Text/en/text.xml` define the effect catalog encoded in
 `redragon/effects.py`. Configuration selections 2–18 map respectively to
 hardware effects 3, 2, 19, 15, 13, 20, 16, 18, 5, 7, 17, 12, 8, 28, 30, 14, 29.
-Selection 2 remains labeled Smooth breathing. Static color and Off retain
-their existing direct implementations. Custom per-key mode is not included.
+Selection 2 remains labeled Smooth breathing. Static uses selection 1 with
+its brightness byte and color-slot flags; Off uses selection 1 at brightness
+zero. Static preserves the unused speed nibble. This uses the same parameter
+table and transaction as native animations, without palette writes. Only the
+seven onboard color presets are offered. Custom per-key mode is not included.
 
 Read command `44` returns ten checked fragments: sequences 0–8 contain
 14 bytes after their length byte; sequence 9 contains the `5a a5` trailer.
@@ -118,7 +120,7 @@ the effect's parameter pair holds brightness 0–4 and speed 0–4 in its high
 nibble. For selections 1–6, the pair is in frame 4 at `7 + 2*(id-1)`;
 for 7–13, frame 5 at `5 + 2*(id-7)`; for 14–18, frame 6 at `5 + 2*(id-14)`.
 The speed byte's low nibble preserves the original onboard color/variant flags,
-except Smooth breathing explicitly selects preset color 0–6. All other
+except Static and Smooth breathing explicitly select preset color 0–6. All other
 payload bytes are preserved. The write reports change command `44` to `04`
 and recompute each checksum. Each configuration fragment must be echoed;
 idempotent fragments retry up to three times on lost echoes.
@@ -133,6 +135,20 @@ backup. A failed restore retains the backup for the next verified connection.
 Changes are sent once per setting change, not once per animation frame.
 The cache includes effect selection and quantized hardware levels, so changing
 effects with otherwise identical settings works and redundant saves are avoided.
+
+Applying is now a single transaction, serialized by a per-configuration lock.
+Each apply reads the current settings and preserves unrelated fields, while
+retaining the first original backup for explicit recovery. An unchanged
+read-back avoids another EEPROM save. Completed saves are marked `committed`
+and survive closing the HID handle, quitting and login. Interrupted transactions
+are restored before the next explicit apply. `rgb --restore` (or the matching
+GUI button) restores the retained backup. Stopping services never undoes a
+completed save. Neither tray supervision nor settings edits send lighting traffic.
+
+Static/Off packet preservation and the new persistence lifecycle are covered
+by simulated tests. No physical K686 is available in this session, so these
+new paths have not been validated on hardware here; complete read-back is still
+mandatory before the app reports success.
 
 The user explicitly approved the native test on 2026-10-09 and confirmed
 smooth cyan breathing at brightness 3/4 and speed 2/4. The initial generic
@@ -156,8 +172,8 @@ A read-only feature query `06 84 00 00 01 00 80 00` returned the matching
 USB control requests returned protocol errors. The user disconnected USB and
 returned to 2.4G; the retained original backup was then restored and verified
 through the receiver. The production driver does **not** include this wired
-native write path. Its capability and backend guards allow only Static color
-and Off over USB; native writes are rejected before opening the wired device.
+native write path. Its capability and backend guards now disable all lighting
+writes over USB; native writes are rejected before opening the wired device.
 No software animation fallback is used. Original input mapping remains managed
 separately through evdev and follows the available explicitly linked endpoint.
 

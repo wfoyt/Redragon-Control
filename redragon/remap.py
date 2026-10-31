@@ -116,6 +116,7 @@ class InputMapper:
         self.held: dict[tuple[str, int], tuple[int, ...]] = {}
         self.counts: Counter = Counter()
         self.physical_down: set[tuple[str, int]] = set()
+        self.pressed_actions: dict[tuple[str, int], object] = {}
         self.ignored: set[tuple[str, int]] = set()
         self.dropped: set[str] = set()
         self.highres: dict[tuple[str, int], int] = {}
@@ -143,17 +144,20 @@ class InputMapper:
                 self._release(self.held.pop(token))
         if source is None:
             self.highres.clear()
+            self.physical_down.clear()
+            self.pressed_actions.clear()
         else:
             self.highres = {token: value for token, value in self.highres.items() if token[0] != source}
+            self.physical_down = {token for token in self.physical_down if token[0] != source}
+            self.pressed_actions = {token: action for token, action in self.pressed_actions.items() if token[0] != source}
         self.output.syn()
 
     def update_bindings(self, bindings: dict) -> None:
         translated = compile_bindings(bindings, self.codes)
         if translated == self.bindings:
             return
-        self.release_all()
-        self.ignored.update(self.physical_down)
-        self.physical_down.clear()
+        # A key owns its press-time action until release. Reloading a wheel
+        # binding must not release modifiers or swallow letters being typed.
         self.bindings = translated
         self.key_bindings = {self.codes.ecodes[source]: action for source, action in translated.items()
                              if source not in WHEEL_SOURCES}
@@ -179,7 +183,17 @@ class InputMapper:
             if event.type == e.EV_SYN and event.code == e.SYN_REPORT:
                 self.dropped.remove(source)
                 if device is not None:
-                    self.ignore_initial_keys(source, device.active_keys())
+                    for code in device.active_keys():
+                        action = self.key_bindings.get(code, 'default')
+                        if action in ('default', (code,)):
+                            token = (source, code)
+                            self.physical_down.add(token)
+                            self.held[token] = (code,)
+                            self.pressed_actions[token] = (code,)
+                            self._press((code,))
+                        else:
+                            self.ignore_initial_keys(source, [code])
+                    self.output.syn()
             return
         if event.type == e.EV_KEY:
             token = (source, event.code)
@@ -194,6 +208,7 @@ class InputMapper:
                 if token in self.physical_down:
                     return
                 self.physical_down.add(token)
+                self.pressed_actions[token] = action
                 if isinstance(action, tuple):
                     self.held[token] = action
                     self._press(action)
@@ -201,13 +216,14 @@ class InputMapper:
                     self._scroll(action)
             elif event.value == 0:
                 self.physical_down.discard(token)
+                self.pressed_actions.pop(token, None)
                 self._release(self.held.pop(token, ()))
             elif event.value == 2 and token in self.physical_down:
                 held = self.held.get(token)
                 if held:
                     self.output.write(e.EV_KEY, held[-1], 2)
-                elif action in SCROLL_ACTIONS:
-                    self._scroll(action)
+                elif self.pressed_actions.get(token) in SCROLL_ACTIONS:
+                    self._scroll(self.pressed_actions[token])
             return
         wheel_axes = {e.REL_WHEEL: ("REL_WHEEL_UP", "REL_WHEEL_DOWN"),
                       e.REL_HWHEEL: ("REL_HWHEEL_RIGHT", "REL_HWHEEL_LEFT")}
@@ -270,6 +286,24 @@ def _capabilities(devices: list, codes) -> dict:
     result[codes.EV_REL] = sorted(set(result.get(codes.EV_REL, [])) | {
         getattr(codes, name) for name in ("REL_WHEEL", "REL_HWHEEL", "REL_WHEEL_HI_RES", "REL_HWHEEL_HI_RES") if hasattr(codes, name)})
     return result
+
+
+def _binding_interfaces(devices, bindings, codes):
+    """Leave unrelated composite interfaces (especially typing) ungrabbed."""
+    compiled = compile_bindings(bindings, codes)
+    keys = {codes.ecodes[source] for source, action in compiled.items()
+            if source not in WHEEL_SOURCES and action not in ('default', (codes.ecodes[source],))}
+    axes = set()
+    for source, low, high in (
+            ('REL_WHEEL_UP', 'REL_WHEEL', 'REL_WHEEL_HI_RES'),
+            ('REL_WHEEL_DOWN', 'REL_WHEEL', 'REL_WHEEL_HI_RES'),
+            ('REL_HWHEEL_LEFT', 'REL_HWHEEL', 'REL_HWHEEL_HI_RES'),
+            ('REL_HWHEEL_RIGHT', 'REL_HWHEEL', 'REL_HWHEEL_HI_RES')):
+        if compiled.get(source, 'default') != 'default':
+            axes.update(getattr(codes, name) for name in (low, high) if hasattr(codes, name))
+    return [device for device in devices
+            if keys.intersection(device.capabilities().get(codes.EV_KEY, []))
+            or axes.intersection(device.capabilities().get(codes.EV_REL, []))]
 
 
 class RemapDaemon:
@@ -353,11 +387,14 @@ class RemapDaemon:
                 device = module.InputDevice(path)
                 devices.append(device)
                 _verify_opened(device, selected)
-            output = module.UInput(_capabilities(devices, module.ecodes),
+            active_devices = _binding_interfaces(devices, data.get('bindings', {}), module.ecodes)
+            if not active_devices:
+                raise RemapError('None of the selected keyboard interfaces exposes your bound controls. Check the bindings and wheel mode.')
+            output = module.UInput(_capabilities(active_devices, module.ecodes),
                 name=f"{VIRTUAL_NAME} virtual keyboard", phys=f'redragon-control/{selected["id"]}',
                 vendor=0x1209, product=0xD686)
             mapper = InputMapper(output, module.ecodes, data.get("bindings", {}))
-            for device in devices:
+            for device in active_devices:
                 device.grab()
                 grabbed.append(device)
                 mapper.ignore_initial_keys(device.path, device.active_keys())
@@ -379,11 +416,13 @@ class RemapDaemon:
                                 return replacement
                             if not _has_effective_bindings(replacement.get("bindings", {})):
                                 return replacement
+                            if _binding_interfaces(devices, replacement.get('bindings', {}), module.ecodes) != active_devices:
+                                return replacement
                             mapper.update_bindings(replacement.get("bindings", {}))
                             data = replacement
                     except (RemapError, OSError) as exc:
                         LOG.warning("Ignoring invalid input configuration; previous bindings remain active: %s", exc)
-                ready, _, _ = select.select(devices, [], [], 0.1)
+                ready, _, _ = select.select(active_devices, [], [], 0.1)
                 for device in ready:
                     try:
                         for event in device.read():

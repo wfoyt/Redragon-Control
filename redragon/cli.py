@@ -2,7 +2,9 @@
 
 import argparse
 import json
+import logging
 import sys
+from pathlib import Path
 
 from . import __version__
 from .config import MODES
@@ -18,6 +20,8 @@ def parser():
     commands.add_parser("gui", help="Open the native libadwaita app")
     tray = commands.add_parser("tray", help="Run the system tray indicator without opening a settings window")
     tray.add_argument("--open-settings", action="store_true", help="Also open settings in the running tray's session")
+    startup = commands.add_parser("autostart", help="Manage launch at desktop login")
+    startup.add_argument("action", choices=("status", "enable", "disable", "run"), default="status", nargs="?")
     commands.add_parser("devices", help="List USB/HID device families without writing to them")
     commands.add_parser("status", help="Show settings, device capabilities and remapper status")
     commands.add_parser("doctor", help="Check dependencies and device permissions")
@@ -27,10 +31,13 @@ def parser():
     link.add_argument("device_id")
     rgb = commands.add_parser("rgb", help="Save lighting settings; use --apply to send supported RGB")
     rgb.add_argument("--mode", choices=MODES)
-    rgb.add_argument("--color", help="Hex color, e.g. '#00ff88'")
+    rgb.add_argument("--color", help="Onboard preset hex color; old custom colors are mapped to the nearest preset")
     rgb.add_argument("--brightness", type=int)
     rgb.add_argument("--speed", type=int)
-    rgb.add_argument("--apply", action="store_true", help="Apply supported lighting and keep it active")
+    rgb.add_argument("--apply", action="store_true", help="Save onboard lighting once over 2.4 GHz, without a daemon")
+    rgb.add_argument("--restore", action="store_true", help="Restore the previous onboard lighting backup")
+    theme = commands.add_parser('theme', help='Read or choose the application theme')
+    theme.add_argument('choice', nargs='?', choices=('auto', 'adwaita', 'omarchy'))
     bindings = commands.add_parser("bind", help="Remap a Linux input key or wheel direction")
     bindings.add_argument("source")
     bindings.add_argument("target", help="KEY_A, KEY_LEFTCTRL+KEY_C, scroll-up, disabled or default")
@@ -71,6 +78,30 @@ def doctor(controller):
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
+        if args.command == "autostart":
+            if args.demo:
+                raise ControlError("Login startup requires real saved settings.")
+            from . import autostart
+            if args.action == 'run':
+                if not autostart.enabled():
+                    return 0
+                from .tray import run
+                return run(config_path=args.config) or 0
+            if args.action == 'status':
+                result = {'enabled': autostart.enabled(), 'path': str(autostart.entry_path())}
+            else:
+                command = autostart.launch_command()
+                if args.config:
+                    command += ['--config', str(Path(args.config).resolve())]
+                result = autostart.install(command, active=args.action == 'enable')
+            print(json.dumps({'ok': True, 'result': result}, indent=2))
+            return 0
+        if args.command in (None, 'gui', 'tray') and not args.demo and not args.config:
+            from .autostart import ensure
+            try:
+                ensure()
+            except OSError as exc:
+                logging.warning("Could not register launch at login: %s", exc)
         if args.command in (None, "gui"):
             from .gui import run
             return run(config_path=args.config, demo=args.demo) or 0
@@ -92,7 +123,14 @@ def main(argv=None):
         elif args.command == "link":
             result = controller.link_device(args.device_id)
         elif args.command == "rgb":
-            result = controller.set_lighting(mode=args.mode, color=args.color, brightness=args.brightness, speed=args.speed, apply=args.apply)
+            if args.restore:
+                if args.apply or any(value is not None for value in (args.mode, args.color, args.brightness, args.speed)):
+                    raise ControlError('Use --restore on its own, without lighting changes.')
+                result = controller.restore_lighting()
+            else:
+                result = controller.set_lighting(mode=args.mode, color=args.color, brightness=args.brightness, speed=args.speed, apply=args.apply)
+        elif args.command == 'theme':
+            result = controller.set_theme(args.choice) if args.choice else controller.appearance()
         elif args.command == "bind":
             result = controller.set_binding(args.source, args.target)
         elif args.command == "unbind":

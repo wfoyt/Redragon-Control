@@ -7,7 +7,6 @@ import re
 from .config import ConfigStore, DEFAULTS, atomic_write, read_json, validate_binding
 from .devices import discover_devices, resolve_device, resolve_config_device, ConnectionStore
 from .errors import ControlError
-from .effects import NATIVE_EFFECTS
 from . import runtime
 
 RESET_MESSAGE = (
@@ -35,7 +34,7 @@ class Controller:
             config = self._config()
             operation(config)
             self._demo_config = validate_config(config)
-            return deepcopy(config)
+            return deepcopy(self._demo_config)
         return self.store.update(operation)
 
     def _devices(self):
@@ -75,7 +74,38 @@ class Controller:
                 "lighting_daemon": {"running": False} if self.demo else runtime.daemon_status(self.store.path, "rgb"),
                 "background": {"remap": False, "rgb": False} if self.demo else BackgroundStore(self.store.path).read(),
                 "linked_device_ids": [] if self.demo else ConnectionStore(self.store.path).aliases(self._config()["device_id"]),
-                "demo": self.demo}
+                "lighting_state": {} if self.demo else self._saved_lighting_state(),
+                "appearance": self.appearance(), "demo": self.demo}
+
+    def _saved_lighting_state(self):
+        import json
+        from .native_lighting import backup_path
+        path = backup_path(self.store.path)
+        if not path.exists():
+            return {}
+        try:
+            saved = json.loads(path.read_text())
+            device_id = self._config()['device_id']
+            matches = saved['device_id'] == device_id or saved['device_id'] in ConnectionStore(self.store.path).aliases(device_id)
+            return {'recovery_available': matches, 'saved_on_keyboard': matches and saved.get('committed', False),
+                    'lighting': saved.get('lighting', {}) if matches else {}}
+        except (OSError, ValueError, KeyError, TypeError):
+            return {'recovery_available': True, 'saved_on_keyboard': False}
+
+    def appearance(self):
+        from .appearance import AppearanceStore, resolve_theme
+        choice = getattr(self, '_demo_theme', 'auto') if self.demo else AppearanceStore(self.store.path).read()['theme']
+        return {'theme': choice, 'resolved_theme': resolve_theme(choice)}
+
+    def set_theme(self, theme):
+        from .appearance import AppearanceStore, THEMES
+        if theme not in THEMES:
+            raise ControlError('Choose Automatic, Adwaita or Omarchy.')
+        if self.demo:
+            self._demo_theme = theme
+        else:
+            AppearanceStore(self.store.path).set(theme)
+        return self.appearance()
 
     def select_device(self, device_id):
         device = resolve_device(device_id, self._devices())
@@ -107,7 +137,7 @@ class Controller:
         changes = {k: v for k, v in locals().items() if k in ("mode", "color", "brightness", "speed") and v is not None}
         config = self._update(lambda config: config["lighting"].update(changes))
         result = {"saved": True, "applied": False, "lighting": config["lighting"],
-                  "live_reload": False if self.demo else runtime.daemon_status(self.store.path, "rgb")["running"]}
+                  "live_reload": False}
         if apply:
             result.update(self.apply_lighting())
         return result
@@ -115,28 +145,27 @@ class Controller:
     def apply_lighting(self):
         if self.demo:
             return {"applied": False, "demo": True, "message": "Demo preview only."}
-        # Verify hardware support before starting a persistent direct-mode refresh process.
+        # Stop legacy keepalive workers before the single saved transaction.
+        self.stop_lighting()
         backend = self._lighting()
         try:
-            if self._config()['lighting']['mode'] in NATIVE_EFFECTS:
-                if not backend.capabilities().get('native_effects'):
-                    raise ControlError('Use the K686 MAX 2.4 GHz receiver for built-in effects. Static color and Off also work over USB.')
-                # The managed worker owns native mode and its recovery backup.
-                result = {'native_effect': True, 'keepalive_required': False}
-            else:
-                result = backend.apply(self._config()['lighting'])
+            if not backend.capabilities()['rgb']:
+                raise ControlError(backend.capabilities()['message'])
+            result = backend.apply_native(self._config()['lighting'], self.store.path)
         finally:
             if hasattr(backend, "close"):
                 backend.close()
-        from .background import BackgroundStore
-        previous = BackgroundStore(self.store.path).read()["rgb"]
-        self._background_enabled("rgb", True)
+        return {**result, "applied": True, "daemon": {"running": False}, "software_effect": False}
+
+    def restore_lighting(self):
+        if self.demo:
+            return {'restored': False, 'demo': True}
+        self.stop_lighting()
+        backend = self._lighting()
         try:
-            daemon = runtime.start_daemon(self.store.path, "rgb")
-        except Exception:
-            self._background_enabled("rgb", previous)
-            raise
-        return {**result, "applied": True, "daemon": daemon, "software_effect": False}
+            return backend.restore_native(self.store.path)
+        finally:
+            backend.close()
 
     def set_binding(self, source, target):
         validate_binding(source, target)
@@ -230,7 +259,7 @@ class Controller:
         return {"imported": str(Path(path).resolve()), "applied": False,
                 "live_reload": {"remap": False, "rgb": False} if self.demo else
                     {"remap": runtime.daemon_status(self.store.path)["running"],
-                     "rgb": runtime.daemon_status(self.store.path, "rgb")["running"]}}
+                     "rgb": False}}
 
     def _profile_path(self, name):
         if not isinstance(name, str) or not re.fullmatch(r"[\w -]{1,64}", name) or name in (".", ".."):

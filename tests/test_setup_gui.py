@@ -12,13 +12,19 @@ from unittest.mock import patch
 @unittest.skipUnless(os.environ.get('REDRAGON_GUI_TESTS') == '1', 'requires an isolated GTK display')
 class SetupGuiTests(unittest.TestCase):
     def setUp(self):
-        from redragon.gui import ControlApplication, GLib
+        from redragon.gui import ControlApplication, GLib, Gtk
         self.context = GLib.MainContext.default()
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / 'config.json'
         self.app = ControlApplication(self.path, demo=True)
         self.app.register(None)
+        # Test the settled page state independently of compositor timing and
+        # ViewStack crossfades, which can pause on a headless display.
+        settings = Gtk.Settings.get_default()
+        animations = settings.get_property('gtk-enable-animations')
+        settings.set_property('gtk-enable-animations', False)
+        self.addCleanup(settings.set_property, 'gtk-enable-animations', animations)
         self.app.activate()
         self.window = self.app.window
         self.assertIsNotNone(self.window)
@@ -36,6 +42,23 @@ class SetupGuiTests(unittest.TestCase):
                     break
                 self.context.iteration(False)
             time.sleep(.005)
+
+    def test_close_while_busy_does_not_destroy_the_window_or_theme(self):
+        self.window._busy = True
+        try:
+            with patch.object(self.window, '_toast') as toast:
+                self.assertTrue(self.window.emit('close-request'))
+            toast.assert_called_once()
+            self.assertFalse(self.window.theme_manager.closed)
+        finally:
+            self.window._busy = False
+
+    def test_first_page_has_access_button_disabled_in_demo(self):
+        self.assertEqual(self.window.hardware_access_button.get_label(), 'Enable keyboard access')
+        self.assertFalse(self.window.hardware_access_button.get_sensitive())
+        with patch('redragon.hardware_setup.enable_keyboard_access') as enable:
+            self.window._enable_keyboard_access()
+        enable.assert_not_called()
 
     def test_next_discards_unapplied_edits_and_finish_restores_main_controls(self):
         window = self.window
@@ -171,6 +194,9 @@ class SetupGuiTests(unittest.TestCase):
         self.assertFalse(window.preview.get_mapped())
         window._finish_setup(); self.settle()
         self.assertTrue(window.preview.get_mapped())
+        # Broadway can pause its frame clock when its browser is hidden. Run
+        # GTK's allocation at the real window size before checking geometry.
+        window.allocate(window.get_width(), window.get_height(), -1, None)
         selector_ok, selector = window.device_dropdown.compute_bounds(window)
         preview_ok, preview = window.preview.compute_bounds(window)
         self.assertTrue(selector_ok and preview_ok)
@@ -182,16 +208,47 @@ class SetupGuiTests(unittest.TestCase):
         window.stack.set_visible_child_name('lighting'); self.settle()
         self.assertTrue(window.preview.get_mapped())
 
-    def test_manual_color_keeps_picker_in_sync(self):
+    def test_static_color_uses_only_onboard_presets(self):
         window = self.window
-        window.color_entry.set_text('#12AB34')
-        color = window.color_button.get_rgba()
-        self.assertAlmostEqual(color.red, 0x12 / 255)
-        self.assertAlmostEqual(color.green, 0xAB / 255)
-        self.assertAlmostEqual(color.blue, 0x34 / 255)
-        window.color_entry.set_text('#12')
-        self.assertTrue(window.color_button.get_rgba().equal(color))
-        self.assertEqual(window.color_entry.get_text(), '#12')
+        self.assertFalse(window.color_entry.get_editable())
+        self.assertTrue(window.native_color_dropdown.get_visible())
+        window.native_color_dropdown.set_selected(5)
+        self.assertEqual(window.color_entry.get_text(), '#00ffff')
+        window.brightness_scale.set_value(62)
+        self.assertEqual(window.brightness_scale.get_value(), 50)
+
+    def test_appearance_switches_between_adwaita_and_omarchy_without_restart(self):
+        window = self.window
+        window._finish_setup(); self.settle()
+        window._appearance(); self.settle()
+        self.addCleanup(window.appearance_dialog.close)
+        window.appearance_row.set_selected(1); self.settle()
+        self.assertEqual(window.controller.appearance()['theme'], 'adwaita')
+        self.assertEqual(window.theme_manager.signature[0], '')
+        window.appearance_row.set_selected(2); self.settle()
+        self.assertEqual(window.controller.appearance()['theme'], 'omarchy')
+        self.assertIn('--window-bg-color:', window.theme_manager.signature[0])
+        self.assertFalse(self.path.exists(), 'demo appearance must not write keyboard settings')
+
+    def test_omarchy_palette_changes_reload_without_polling_or_hardware(self):
+        from redragon import appearance, ui_theme
+        palette = self.path.parent / 'theme/colors.toml'
+        palette.parent.mkdir()
+        colors = 'background = "#17121e"\nforeground = "#ffffff"\naccent = "#ff9d45"\n'
+        palette.write_text(colors)
+        with patch.object(appearance, 'palette_paths', return_value=[palette]), \
+             patch.object(ui_theme, 'palette_paths', return_value=[palette]):
+            self.window.controller.set_theme('omarchy')
+            self.window.theme_manager.reload()
+            replacement = palette.with_suffix('.new')
+            replacement.write_text(colors.replace('#ff9d45', '#00ffff'))
+            replacement.replace(palette)
+            deadline = time.monotonic() + 3
+            while '#00ffff' not in self.window.theme_manager.signature[0]:
+                self.assertLess(time.monotonic(), deadline, 'theme file change was not applied')
+                self.context.iteration(False)
+                time.sleep(.005)
+
 
     def test_lighting_save_preserves_unsaved_wheel_actions(self):
         window = self.window

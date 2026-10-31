@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from redragon.cli import main
 from redragon.config import ConfigStore, DEFAULTS, atomic_write
@@ -189,6 +189,73 @@ class CoreCliTests(unittest.TestCase):
             with self.assertRaises(ControlError):
                 Controller(self.path).start_daemon()
         self.assertFalse(background.read()["remap"])
+
+
+    def test_lighting_is_saved_once_without_starting_a_background_service(self):
+        from redragon.background import BackgroundStore
+        controller = Controller(self.path)
+        backend = Mock()
+        backend.capabilities.return_value = {'rgb': True}
+        backend.apply_native.return_value = {'saved_on_keyboard': True, 'keepalive_required': False}
+        with patch.object(controller, '_lighting', return_value=backend), \
+             patch('redragon.runtime.stop_daemon'), patch('redragon.runtime.start_daemon') as start:
+            for mode in ('static', 'off', 'rainbow'):
+                result = controller.set_lighting(mode=mode, apply=True)
+                self.assertTrue(result['saved_on_keyboard'])
+                self.assertFalse(result['daemon']['running'])
+        self.assertEqual(backend.apply_native.call_count, 3)
+        backend.apply.assert_not_called()
+        self.assertFalse(BackgroundStore(self.path).read()['rgb'])
+        start.assert_not_called()
+
+    def test_lighting_preferences_do_not_live_reload_or_write_hardware(self):
+        with patch('redragon.lighting._FeatureDevice') as opened, \
+             patch('redragon.runtime.daemon_status', return_value={'running': True}):
+            result = Controller(self.path).set_lighting(mode='static', color='#00ffff')
+        self.assertFalse(result['live_reload'])
+        opened.assert_not_called()
+
+    def test_theme_cli_persists_and_isolated_demo_does_not_replace_it(self):
+        code, out, err = self.cli('theme', 'adwaita')
+        self.assertEqual((code, err), (0, ''))
+        self.assertEqual(json.loads(out)['result']['resolved_theme'], 'adwaita')
+        self.cli('--demo', 'theme', 'omarchy')
+        self.assertEqual(Controller(self.path).appearance()['theme'], 'adwaita')
+
+    def test_rgb_daemon_start_is_rejected_to_prevent_streaming(self):
+        with self.assertRaisesRegex(ControlError, 'no longer needs a daemon'):
+            runtime.start_daemon(self.path, 'rgb')
+
+
+    def test_appimage_daemon_is_recognized_from_another_mount(self):
+        metadata, lock_path, _ = runtime.runtime_paths(self.path)
+        atomic_write(metadata, {'pid': os.getpid(), 'ready': True})
+        old = self.path.parent / 'old-mount'
+        loader = old / 'usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
+        libs = ':'.join(str(old / p) for p in ('lib', 'usr/lib/x86_64-linux-gnu', 'usr/lib'))
+        argv = [str(loader), '--library-path', libs, str(old / 'usr/bin/python3'), '-P',
+                '-m', 'redragon', '--config', str(self.path.resolve()), 'daemon', 'run', '--kind', 'remap']
+        resolve = Path.resolve
+        def resolve_process(path, *args, **kwargs):
+            if str(path) == f'/proc/{os.getpid()}/exe':
+                return loader
+            return resolve(path, *args, **kwargs)
+        with lock_path.open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with patch.dict(os.environ, REDRAGON_APPIMAGE_LAUNCHER='/another-mount/AppRun'), \
+                 patch('redragon.runtime.Path.read_bytes', side_effect=lambda: '\0'.join(argv).encode()+b'\0'), \
+                 patch.object(Path, 'resolve', resolve_process):
+                self.assertTrue(runtime.daemon_status(self.path)['running'])
+                argv[-1] = 'rgb'
+                self.assertFalse(runtime.daemon_status(self.path)['running'])
+
+
+    def test_demo_lighting_result_matches_normalized_saved_values(self):
+        controller = Controller(self.path, demo=True)
+        result = controller.set_lighting(mode='static', color='#00ccbb', brightness=65)
+        self.assertEqual(result['lighting'], controller._config()['lighting'])
+        self.assertEqual(result['lighting']['color'], '#00ffff')
+        self.assertEqual(result['lighting']['brightness'], 75)
 
 
 if __name__ == "__main__":

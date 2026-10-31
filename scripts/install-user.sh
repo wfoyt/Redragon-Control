@@ -28,15 +28,11 @@ for directory in (bin_dir, apps, icons, autostart):
 launcher = bin_dir / 'redragonctl'
 launcher.write_text('#!/usr/bin/env bash\nexec ' + shlex.quote(str(root / 'run.sh')) + ' "$@"\n')
 launcher.chmod(0o755)
-# Desktop Exec uses its own escaping, not shell quoting.
-desktop_exec = '"' + str(launcher).replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%') + '"'
+from redragon.autostart import desktop_arg, install
+desktop_exec = desktop_arg(str(launcher))
 template = (root / 'data/io.github.redragon.Control.desktop.in').read_text()
 (apps / 'io.github.redragon.Control.desktop').write_text(template.replace('@LAUNCHER@', desktop_exec))
-(autostart / 'io.github.redragon.Control.desktop').write_text(
-    '[Desktop Entry]\nType=Application\nName=Redragon Control\n'
-    'Comment=Keep keyboard remapping and lighting active in the tray\n'
-    f'Exec={desktop_exec} tray\nIcon=io.github.redragon.Control\n'
-    'Terminal=false\nX-GNOME-Autostart-enabled=true\nX-GNOME-Autostart-Delay=5\n')
+install([str(launcher)])
 icon = root / 'data/io.github.redragon.Control.svg'
 if icon.exists():
     (icons / icon.name).write_bytes(icon.read_bytes())

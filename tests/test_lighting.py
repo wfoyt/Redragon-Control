@@ -62,40 +62,38 @@ class LightingTests(unittest.TestCase):
 
     @patch("redragon.lighting._feature_report_size", return_value=520)
     @patch("redragon.lighting._FeatureDevice", FakeHid)
-    def test_verified_model_is_queried_before_rgb(self, _):
-        result = LightingBackend(self.device).apply({"mode": "static"})
-        self.assertEqual(len(FakeHid.sent), 2)
+    def test_wired_probe_verifies_model_without_changing_lighting(self, _):
+        result = LightingBackend(self.device).probe()
+        self.assertEqual(len(FakeHid.sent), 1)
         self.assertEqual(FakeHid.sent[0][:7], bytes.fromhex("06 82 01 00 01 00 06"))
-        self.assertEqual(FakeHid.sent[1][1], 8)
-        self.assertTrue(result["transient"])
+        self.assertTrue(result['supported'])
+        self.assertFalse(result['lighting_written'])
 
     @patch("redragon.lighting._feature_report_size", return_value=520)
     @patch("redragon.lighting._FeatureDevice", FakeHid)
     def test_other_sinowealth_models_never_receive_rgb(self, _):
         FakeHid.model = 0xCD
-        with self.assertRaisesRegex(ControlError, "Refusing RGB writes"):
-            LightingBackend(self.device).apply({"mode": "static"})
+        self.assertFalse(LightingBackend(self.device).probe()['supported'])
         self.assertEqual(len(FakeHid.sent), 1)
         self.assertEqual(FakeHid.sent[0][1], 0x82)
 
     @patch("redragon.lighting._feature_report_size", return_value=520)
     @patch("redragon.lighting._FeatureDevice", FakeHid)
-    def test_keepalive_reuses_only_the_same_opened_device(self, _):
+    def test_probe_reuses_only_the_same_verified_opened_device(self, _):
         backend = LightingBackend(self.device)
-        backend.apply({"mode": "static"})
-        backend.apply({"mode": "off"})
-        self.assertEqual([packet[1] for packet in FakeHid.sent], [0x82, 0x08, 0x08])
+        backend.probe()
+        backend.probe()
+        self.assertEqual([packet[1] for packet in FakeHid.sent], [0x82])
         backend.close()
         FakeHid.model = 0xCD
-        with self.assertRaises(ControlError):
-            backend.apply({"mode": "static"})
-        self.assertEqual([packet[1] for packet in FakeHid.sent], [0x82, 0x08, 0x08, 0x82])
+        self.assertFalse(backend.probe()['supported'])
+        self.assertEqual([packet[1] for packet in FakeHid.sent], [0x82, 0x82])
 
     @patch("redragon.lighting._feature_report_size", return_value=9)
     def test_unrelated_hid_interfaces_are_never_opened(self, _):
         with patch("redragon.lighting._FeatureDevice") as opened:
             with self.assertRaisesRegex(ControlError, "No compatible"):
-                LightingBackend(self.device).apply({"mode": "static"})
+                LightingBackend(self.device).probe()
             opened.assert_not_called()
 
     @patch("redragon.lighting._feature_report_size", return_value=520)
@@ -107,7 +105,7 @@ class LightingTests(unittest.TestCase):
                 FakeHid.physical = "usb-test-1/input1"
                 setattr(FakeHid, attribute, value)
                 with self.assertRaises(ControlError):
-                    LightingBackend(self.device).apply({"mode": "static"})
+                    LightingBackend(self.device).probe()
                 self.assertEqual(FakeHid.sent, [])
 
     @patch("redragon.lighting._feature_report_size", return_value=520)

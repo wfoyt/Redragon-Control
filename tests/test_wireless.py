@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from redragon.devices import ConnectionStore, DeviceSelectionError, resolve_config_device
 from redragon.errors import ControlError
-from redragon.lighting import LightingBackend, _FeatureDevice, wireless_frames, wireless_packet
+from redragon.lighting import LightingBackend, _FeatureDevice, wireless_packet
 
 
 WIRELESS = {"id": "3554:fa09@receiver", "vendor_id": 0x3554, "product_id": 0xfa09,
@@ -16,21 +16,11 @@ SETTINGS = {"mode": "static", "color": "#00ccbb", "brightness": 65, "speed": 50}
 
 
 class WirelessTests(unittest.TestCase):
-    def test_stream_preserves_all_led_indices_and_never_writes_configuration(self):
-        frames = wireless_frames(SETTINGS)
-        self.assertEqual(len(frames), 9)
-        data = bytearray()
-        for sequence, frame in enumerate(frames):
-            self.assertEqual(len(frame), 20)
-            self.assertEqual(frame[:4], bytes((0x13, 0x88, 9, sequence)))
-            self.assertEqual(frame[-1], sum(frame[:-1]) & 255)
-            data.extend(frame[5:5 + frame[4] - 0x10])
-        self.assertEqual(data[:4], bytes((0, 133, 122, 113)))
-        self.assertEqual(data[4:], bytes(range(113)))
-
-    def test_zero_and_off_use_documented_black_idle_report(self):
-        for settings in ({**SETTINGS, 'mode': 'off'}, {**SETTINGS, 'brightness': 0}):
-            self.assertEqual(wireless_frames(settings), [wireless_packet(0x88, 1, 0, b'\x23')])
+    def test_host_streaming_is_rejected_before_any_hardware_access(self):
+        with patch('redragon.lighting._FeatureDevice') as opened:
+            with self.assertRaisesRegex(ControlError, 'streamed lighting has been removed'):
+                LightingBackend(WIRELESS).apply(SETTINGS)
+        opened.assert_not_called()
 
     def test_receiver_must_identify_the_exact_k686_max(self):
         device = _FeatureDevice('/dev/hidraw1')
@@ -62,21 +52,21 @@ class WirelessTests(unittest.TestCase):
         hid.wireless_model.side_effect = ControlError('Unknown keyboard')
         with patch('redragon.lighting._output_report_size', return_value=20), \
              patch('redragon.lighting._FeatureDevice', return_value=hid), self.assertRaises(ControlError):
-            backend.apply(SETTINGS)
+            backend.probe()
         hid.send_output.assert_not_called()
         hid.__exit__.assert_called_once()
 
-    def test_wireless_stream_uses_verified_handle_without_requerying_each_frame(self):
+    def test_wireless_probe_reuses_verified_handle_without_any_lighting_writes(self):
         backend = LightingBackend(WIRELESS)
         hid = MagicMock()
         hid.identity.return_value = {"bus": 3, "vendor_id": 0x3554, "product_id": 0xfa09,
                                      "physical_path": "usb-port3/input1"}
         hid.wireless_model.return_value = 32
         with patch('redragon.lighting._output_report_size', return_value=20), patch('redragon.lighting._FeatureDevice', return_value=hid):
-            backend.apply(SETTINGS)
-            backend.apply(SETTINGS)
+            backend.probe()
+            backend.probe()
         hid.wireless_model.assert_called_once()
-        self.assertEqual(hid.send_output.call_count, 18)
+        hid.send_output.assert_not_called()
         hid.send.assert_not_called()
         backend.close()
 

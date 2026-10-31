@@ -23,6 +23,8 @@ from .errors import ControlError  # noqa: E402
 from .effects import MODE_LABELS, NATIVE_EFFECTS  # noqa: E402
 from .preview import EFFECT_DESCRIPTIONS, REACTIVE_MODES, sample  # noqa: E402
 from .setup import SetupStore, keyboard_candidates  # noqa: E402
+from .appearance import THEMES, THEME_LABELS  # noqa: E402
+from .ui_theme import ThemeManager  # noqa: E402
 
 
 APP_ID = "io.github.redragon.Control"
@@ -235,6 +237,10 @@ class ControlWindow(Adw.ApplicationWindow):
         provider.load_from_string(CSS)
         Gtk.StyleContext.add_provider_for_display(
             self.get_display(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.connect('close-request', self._close_requested)
+        self.theme_manager = ThemeManager(self, controller)
+        self.connect('close-request', self.theme_manager.close)
+        self.connect('close-request', lambda *_: Gtk.StyleContext.remove_provider_for_display(self.get_display(), provider) or False)
 
         self.toasts = Adw.ToastOverlay()
         self.set_content(self.toasts)
@@ -257,6 +263,7 @@ class ControlWindow(Adw.ApplicationWindow):
                               ("Export Profile…", "export-profile")):
             menu.append(title, "win." + action)
         section = Gio.Menu()
+        section.append("Appearance…", "win.appearance")
         section.append("About Redragon Control", "win.about")
         menu.append_section(None, section)
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
@@ -266,7 +273,8 @@ class ControlWindow(Adw.ApplicationWindow):
                                ("load-profile", self._load_profile),
                                ("import-profile", self._import_profile),
                                ("export-profile", self._export_profile),
-                               ("about", self._about)):
+                               ("about", self._about),
+                               ("appearance", self._appearance)):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", callback)
             self.add_action(action)
@@ -367,6 +375,12 @@ class ControlWindow(Adw.ApplicationWindow):
         self._setup_device_parent = device_clamp.get_parent()
         self._setup_device_parent.remove(device_clamp)
         detection.append(device_clamp)
+        self.hardware_access_button = _button("Enable keyboard access", css_class="suggested-action")
+        self.hardware_access_button.set_halign(Gtk.Align.CENTER)
+        self.hardware_access_button.set_sensitive(not self.controller.demo)
+        self.hardware_access_button.set_tooltip_text("Install device permissions with administrator authentication; reconnect the receiver afterward if needed")
+        self.hardware_access_button.connect('clicked', self._enable_keyboard_access)
+        detection.append(self.hardware_access_button)
         self.setup_import = _button("Import a profile…")
         self.setup_import.set_halign(Gtk.Align.CENTER)
         self.setup_import.connect("clicked", self._import_setup_profile)
@@ -418,6 +432,12 @@ class ControlWindow(Adw.ApplicationWindow):
         self.setup_navigation = navigation
         self._show_setup_step(0)
 
+    def _enable_keyboard_access(self, *_):
+        if self.controller.demo:
+            return
+        from .hardware_setup import enable_keyboard_access
+        self._run(enable_keyboard_access, lambda result: self._toast(result['message']))
+
     def _show_setup_step(self, step):
         if self._busy:
             return
@@ -437,6 +457,7 @@ class ControlWindow(Adw.ApplicationWindow):
         device = self.state.get("device")
         self.setup_next.set_sensitive(not self._busy and (self._setup_step != 0 or bool(device)))
         self.setup_import.set_sensitive(not self._busy)
+        self.hardware_access_button.set_sensitive(not self._busy and not self.controller.demo)
         self.setup_apply.set_sensitive(not self._busy)
         if self._setup_step == 1:
             index = self.mode_dropdown.get_selected()
@@ -583,20 +604,12 @@ class ControlWindow(Adw.ApplicationWindow):
         mode_row.set_activatable_widget(self.mode_dropdown)
         group.add(mode_row)
 
-        color_row = Adw.ActionRow(title="Color", subtitle="Static color and Smooth breathing; other effects retain onboard colors")
-        self.color_entry = Gtk.Entry(text="#E74957", max_length=7, width_chars=8)
+        color_row = Adw.ActionRow(title="Onboard color", subtitle="Seven presets for Static and Smooth breathing; other effects keep their onboard colors")
+        self.color_entry = Gtk.Entry(text="#ff0000", max_length=7, width_chars=8, editable=False)
         self.color_entry.add_css_class("key-entry")
         self.color_entry.set_valign(Gtk.Align.CENTER)
         self.color_entry.connect("changed", self._lighting_preview_changed)
         color_row.add_suffix(self.color_entry)
-        dialog = Gtk.ColorDialog(title="Choose a lighting color", with_alpha=False)
-        self.color_button = Gtk.ColorDialogButton(dialog=dialog)
-        self.color_button.set_valign(Gtk.Align.CENTER)
-        rgba = Gdk.RGBA()
-        rgba.parse("#E74957")
-        self.color_button.set_rgba(rgba)
-        self.color_button.connect("notify::rgba", self._color_selected)
-        color_row.add_suffix(self.color_button)
         self.native_color_dropdown = Gtk.DropDown.new_from_strings(
             ['Red', 'Green', 'Blue', 'Yellow', 'Magenta', 'Cyan', 'White'])
         self.native_color_dropdown.set_valign(Gtk.Align.CENTER)
@@ -605,26 +618,26 @@ class ControlWindow(Adw.ApplicationWindow):
         color_row.add_suffix(self.native_color_dropdown)
         group.add(color_row)
 
-        self.brightness_scale = self._scale_row(group, "Brightness", "From subtle to vivid", 0, 100, 1, 70)
-        self.speed_scale = self._scale_row(group, "Effect speed", "For animated lighting effects", 0, 100, 1, 50)
+        self.brightness_scale = self._scale_row(group, "Brightness", "Five levels saved on the keyboard", 0, 100, 25, 75)
+        self.speed_scale = self._scale_row(group, "Effect speed", "Five levels for onboard animations", 0, 100, 25, 50)
         self.speed_scale.connect("value-changed", self._lighting_preview_changed)
         self.brightness_scale.connect("value-changed", self._lighting_preview_changed)
         actions = _box(Gtk.Orientation.HORIZONTAL, 10)
         self.lighting_actions = actions
-        self.onboard_button = _button("Use onboard lighting")
-        self.onboard_button.set_tooltip_text("Stop lighting control and restore the keyboard’s original lighting")
-        self.onboard_button.connect("clicked", lambda *_: self._run(self.controller.stop_lighting, "Lighting control stopped · original onboard lighting restored"))
+        self.onboard_button = _button("Restore previous lighting")
+        self.onboard_button.set_tooltip_text("Restore the lighting saved before this app’s first change")
+        self.onboard_button.connect("clicked", lambda *_: self._run(self.controller.restore_lighting, "Previous onboard lighting restored"))
         actions.append(self.onboard_button)
         spacer = Gtk.Box(hexpand=True)
         actions.append(spacer)
         self.lighting_save = _button("Save preferences")
         self.lighting_save.connect("clicked", self._save_lighting)
         actions.append(self.lighting_save)
-        self.lighting_apply = _button("Apply lighting", css_class="suggested-action")
+        self.lighting_apply = _button("Save to keyboard", css_class="suggested-action")
         self.lighting_apply.connect("clicked", lambda *_: self._save_lighting(apply=True))
         actions.append(self.lighting_apply)
         page.append(actions)
-        self.lighting_runtime = _label("Lighting control is stopped", "dim-label", wrap=True)
+        self.lighting_runtime = _label("Lighting runs on the keyboard", "dim-label", wrap=True)
         page.append(self.lighting_runtime)
 
     @staticmethod
@@ -709,6 +722,12 @@ class ControlWindow(Adw.ApplicationWindow):
         local.add(row)
         note, _ = self._note("Export a profile from the menu before making changes you want to keep. Profiles include your lighting preferences and button bindings.")
         page.append(note)
+
+    def _close_requested(self, *_):
+        if self._busy:
+            self._toast('Please wait for the current operation to finish before closing.')
+            return True
+        return False
 
     def _run(self, function, success=None, *, refresh=True, reset_editors=False):
         if self._busy:
@@ -801,15 +820,12 @@ class ControlWindow(Adw.ApplicationWindow):
                 "Lighting settings can be applied to this keyboard." if rgb_supported else
                 "Lighting control is not verified for this keyboard. Preferences are saved locally; device support is pending."))
             self.lighting_apply.set_sensitive(rgb_supported and not demo)
-            lighting_running = bool(state.get("lighting_daemon", {}).get("running"))
-            self.onboard_button.set_sensitive(lighting_running and not demo)
+            saved_lighting = state.get('lighting_state', {})
+            self.onboard_button.set_sensitive(bool(saved_lighting.get('recovery_available')) and rgb_supported and not demo)
             self.lighting_runtime.set_label(
                 "Demo preview · no keyboard is changed" if demo else
-                "Built-in effect runs on the keyboard · Original lighting is saved for recovery"
-                if lighting_running and state.get('config', {}).get('lighting', {}).get('mode') in NATIVE_EFFECTS
-                and capabilities.get('native_effects') else
-                "Static lighting is active · Refresh runs in the background" if lighting_running else
-                "Lighting control is stopped · The keyboard uses its onboard effect")
+                "Lighting saved on the keyboard · No background lighting traffic" if saved_lighting.get('saved_on_keyboard') else
+                "The keyboard uses its onboard lighting · Save changes to apply them")
             if update_lighting:
                 lighting = _lighting(config)
                 mode = lighting.get("mode", "rainbow")
@@ -900,10 +916,9 @@ class ControlWindow(Adw.ApplicationWindow):
         index = self.mode_dropdown.get_selected()
         mode = MODES[index] if index < len(MODES) else 'static'
         native = mode in NATIVE_EFFECTS
-        preset = mode == 'smooth-breathing'
-        if preset:
-            color = Gdk.RGBA()
-            color.parse(self.color_entry.get_text().strip())
+        preset = mode in ('static', 'smooth-breathing')
+        color = Gdk.RGBA()
+        if preset and color.parse(self.color_entry.get_text().strip()):
             channels = (color.red, color.green, color.blue)
             def distance(candidate):
                 values = [int(candidate[i:i + 2], 16) / 255 for i in (1, 3, 5)]
@@ -916,7 +931,7 @@ class ControlWindow(Adw.ApplicationWindow):
                     self.color_entry.set_text(NATIVE_COLORS[selected])
             finally:
                 self._updating = False
-        if native:
+        if mode != 'off':
             self._updating = True
             try:
                 for scale in (self.brightness_scale, self.speed_scale):
@@ -932,10 +947,9 @@ class ControlWindow(Adw.ApplicationWindow):
         mode_supported = mode in self.state.get('capabilities', {}).get('modes', ())
         if native and not mode_supported and not self.state.get('demo'):
             detail = 'Use the K686 MAX 2.4 GHz receiver for built-in animations'
-        self.effect_row.set_subtitle(detail if native else 'Choose a lighting style')
+        self.effect_row.set_subtitle(detail if native or preset else 'Saved on the keyboard · no background traffic')
         self.lighting_apply.set_sensitive(mode_supported and not self.state.get('demo'))
         self.native_color_dropdown.set_visible(preset)
-        self.color_button.set_visible(mode == 'static')
         self.preview_caption.set_text(
             EFFECT_DESCRIPTIONS[mode] + "\n" +
             ("Simulated key presses · illustrative colors and timing" if mode in REACTIVE_MODES else
@@ -943,22 +957,14 @@ class ControlWindow(Adw.ApplicationWindow):
         self.preview.configure(mode,
                                self.color_entry.get_text().strip(),
                                self.brightness_scale.get_value(), self.speed_scale.get_value())
-        rgba = Gdk.RGBA()
-        if rgba.parse(self.color_entry.get_text().strip()):
-            self._updating = True
-            try:
-                self.color_button.set_rgba(rgba)
-            finally:
-                self._updating = False
         if self._in_setup:
             self._update_setup_navigation()
-        color_enabled = mode == 'static'
-        self.color_entry.set_sensitive(color_enabled)
-        self.color_button.set_sensitive(color_enabled)
+        self.color_entry.set_sensitive(preset)
+        self.brightness_scale.set_sensitive(mode != 'off')
         self.speed_scale.set_sensitive(native)
 
     def _native_color_selected(self, *_):
-        if not self._updating and self.mode_dropdown.get_selected() == MODES.index('smooth-breathing'):
+        if not self._updating and self.mode_dropdown.get_selected() in (MODES.index('static'), MODES.index('smooth-breathing')):
             index = self.native_color_dropdown.get_selected()
             if index < len(NATIVE_COLORS):
                 self._updating = True
@@ -968,21 +974,13 @@ class ControlWindow(Adw.ApplicationWindow):
                     self._updating = False
                 self._lighting_preview_changed()
 
-    def _color_selected(self, *_):
-        if self._updating:
-            return
-        rgba = self.color_button.get_rgba()
-        self.color_entry.set_text("#{:02X}{:02X}{:02X}".format(round(rgba.red * 255), round(rgba.green * 255), round(rgba.blue * 255)))
-
     def _save_lighting(self, *_, apply=False, success=None):
         mode = MODES[self.mode_dropdown.get_selected()]
         color = self.color_entry.get_text().strip()
         brightness = int(self.brightness_scale.get_value())
         speed = int(self.speed_scale.get_value())
         supported = self.state.get("capabilities", {}).get("rgb") and not self.state.get("demo")
-        message = "Lighting applied" if apply and supported else "Lighting preferences saved locally"
-        if apply and supported and mode in NATIVE_EFFECTS:
-            message = MODE_LABELS[MODES.index(mode)] + ' applied · runs on the keyboard'
+        message = "Lighting saved on the keyboard · no background service needed" if apply and supported else "Lighting preferences saved locally"
         if not supported and not self.state.get("demo"):
             message += " · device support pending"
         if self.state.get("demo"):
@@ -1155,6 +1153,30 @@ class ControlWindow(Adw.ApplicationWindow):
 
     def _import_profile(self, *_):
         self._file_dialog(False, lambda path: self._run(lambda: self.controller.import_profile(path), "Profile imported", reset_editors=True))
+
+    def _appearance(self, *_):
+        dialog = Adw.PreferencesDialog(title='Appearance')
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(title='Application theme', description=(
+            'Automatic uses Omarchy on Omarchy and Adwaita on other distributions. '
+            'Omarchy follows your current desktop palette.'))
+        row = Adw.ComboRow(title='Theme', model=Gtk.StringList.new(THEME_LABELS))
+        row.set_selected(THEMES.index(self.controller.appearance()['theme']))
+        def selected(*_):
+            choice = row.get_selected()
+            if choice < len(THEMES):
+                try:
+                    self.controller.set_theme(THEMES[choice])
+                    self.theme_manager.reload()
+                except (ControlError, OSError) as error:
+                    self._error(error)
+        row.connect('notify::selected', selected)
+        group.add(row)
+        page.add(group)
+        dialog.add(page)
+        self.appearance_row = row
+        self.appearance_dialog = dialog
+        dialog.present(self)
 
     def _about(self, *_):
         dialog = Adw.AboutDialog(application_name="Redragon Control", application_icon=APP_ID, developer_name="Redragon Control contributors", version=__version__, comments="Independent keyboard controls for Linux. Not affiliated with Redragon.")

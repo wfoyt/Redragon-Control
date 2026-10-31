@@ -14,6 +14,11 @@ from .config import atomic_write, ConfigStore
 from .errors import ControlError
 
 
+def python_command():
+    launcher = os.environ.get('REDRAGON_APPIMAGE_LAUNCHER')
+    return [launcher, '--python'] if launcher else [sys.executable]
+
+
 def runtime_paths(config_path, kind="remap"):
     parent = Path(config_path).parent
     stem = Path(config_path).stem + "." + kind
@@ -38,14 +43,25 @@ def daemon_status(config_path, kind="remap"):
         argv = (process / "cmdline").read_bytes().decode().rstrip("\x00").split("\x00")
         expected = str(Path(config_path).resolve())
         signature = ["-m", "redragon", "--config", expected, "daemon", "run", "--kind", kind]
-        if process.stat().st_uid != os.getuid() or argv[1:] != signature:
+        matches = argv[1:] == signature
+        if len(argv) == len(signature) + 5 and Path(argv[0]).name == 'ld-linux-x86-64.so.2':
+            # Each AppImage launch has a different mount. Validate the running
+            # daemon's complete launcher rather than this caller's mount path.
+            root = Path(argv[0]).parents[3]
+            loader = root / 'usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
+            libraries = ':'.join(str(root / path) for path in ('lib', 'usr/lib/x86_64-linux-gnu', 'usr/lib'))
+            prefix = [str(loader), '--library-path', libraries, str(root / 'usr/bin/python3'), '-P']
+            matches = argv == prefix + signature and (process / 'exe').resolve() == loader.resolve()
+        if process.stat().st_uid != os.getuid() or not matches:
             return {"running": False, "log": str(log)}
         return {"running": True, "pid": pid, "ready": value.get("ready", False), "log": str(log)}
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, IndexError):
         return {"running": False, "log": str(log)}
 
 
 def start_daemon(config_path, kind="remap"):
+    if kind == 'rgb':
+        raise ControlError('Lighting no longer needs a daemon. Use rgb --apply to save it on the keyboard.')
     config_path = Path(config_path).resolve()
     current = daemon_status(config_path, kind)
     if current["running"]:
@@ -65,7 +81,7 @@ def start_daemon(config_path, kind="remap"):
     with log.open("a") as output:
         os.chmod(log, 0o600)
         process = subprocess.Popen(
-            [sys.executable, "-m", "redragon", "--config", str(config_path), "daemon", "run", "--kind", kind],
+            python_command() + ["-m", "redragon", "--config", str(config_path), "daemon", "run", "--kind", kind],
             stdin=subprocess.DEVNULL, stdout=output, stderr=output, env=env, start_new_session=True,
         )
     deadline = time.monotonic() + (15 if kind == 'rgb' else 5)
@@ -132,40 +148,18 @@ def lighting_frame(settings, elapsed):
 def run_lighting(config_path, stopped, ready):
     from .devices import resolve_config_device
     from .lighting import LightingBackend
-    from .effects import NATIVE_EFFECTS
 
     store = ConfigStore(config_path)
     backend = None
-    selected = None
-    announced = False
     try:
-        while not stopped.is_set():
-            frame_started = time.monotonic()
+        if not stopped.is_set():
             config = store.read()
             if not config["device_id"]:
                 raise ControlError("Lighting stopped: no keyboard selected.")
             active_device = resolve_config_device(store.path, config['device_id'])
-            if selected != active_device['id']:
-                if backend and hasattr(backend, "close"):
-                    try:
-                        backend.close()
-                    except (ControlError, OSError):
-                        # Recovery remains durable and can run through the
-                        # explicitly linked cable/receiver that is now active.
-                        pass
-                backend = LightingBackend(active_device)
-                backend.recover_native(store.path)
-                selected = active_device['id']
-            native = config['lighting']['mode'] in NATIVE_EFFECTS
-            if native:
-                backend.apply_native(config['lighting'], store.path)
-            else:
-                backend.apply(config['lighting'])
-            if not announced:
-                ready()
-                announced = True
-            interval = 0.25 if native else 0.05 if backend.capabilities().get('wireless') else 0.5
-            stopped.wait(max(0, interval - (time.monotonic() - frame_started)))
+            backend = LightingBackend(active_device)
+            backend.apply_native(config['lighting'], store.path)
+            ready()
     finally:
         if backend and hasattr(backend, "close"):
             backend.close()

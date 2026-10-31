@@ -7,90 +7,24 @@ built for the **Redragon K686WBG-RGB-MAX**. No web view or Electron runtime.
 
 ![Native application preview](screenshots/lighting.png)
 
-## Install the Flatpak (0.2.2)
+## AppImage installation and builds
 
-Download `Redragon-Control-0.2.2-x86_64.flatpak` from
-[GitHub Releases](https://github.com/wfoyt/Redragon-Control/releases).
-Redragon Control is not available on Flathub. The Flathub remote below supplies
-the shared GNOME runtime only. The bundle includes
-the app, evdev and tray libraries, and uses the GNOME 50 Flatpak runtime for
-Python, GTK and libadwaita. Host GTK/Python packages are not needed. The bundle
-works across Linux distributions on **x86_64** computers with Flatpak, udev,
-uinput and a graphical desktop supporting the Background portal (including
-GNOME and KDE Plasma). Other CPU architectures require a separate build. It does not
-run on Windows or macOS, or add support for other Redragon keyboard models.
-
-Install Flatpak using your distribution's Software app or package manager,
-then double-click the bundle, or run these commands in its folder:
+Download the x86_64 AppImage, make it executable, and run it:
 
 ```bash
-flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./Redragon-Control-0.2.2-x86_64.flatpak
-flatpak run io.github.redragon.Control
+chmod +x Redragon-Control-0.2.5-x86_64.AppImage
+./Redragon-Control-0.2.5-x86_64.AppImage
 ```
 
-Flatpak downloads the shared GNOME runtime if needed; the single app bundle
-does not include that large runtime and is not a complete offline installer.
-The local bundle has no hosted update repository; install a newer versioned
-bundle to update the app. `flatpak update` updates its shared runtime.
+The app bundles Python, GTK, libadwaita, evdev and tray libraries. Flatpak
+releases are no longer produced. **Enable keyboard access** on the first setup
+page installs device-specific permissions through Polkit without running the
+main application as root. Reconnect the receiver if permissions remain blocked.
 
-On first launch, connect the keyboard or receiver. If Linux has not granted
-keyboard access, the app **blocks startup** and offers **Save hardware setup
-script…**. Save it locally (for example in Downloads) and run the exact
-`sudo bash …` command displayed in the app, in your normal desktop Terminal.
-The standalone script installs device-specific udev rules and enables uinput;
-it checks prerequisites and exits with a friendly explanation on failure.
-Reconnect the keyboard and choose **Check again**. The app checks actual access;
-an unsuccessful script cannot unlock the main application. A computer already
-configured with the existing hardware setup does not need to rerun the script.
-
-Allow background activity and automatic startup in your desktop's permission
-prompt. Startup is only accepted when the desktop confirms **both** permissions.
-If denied or unavailable, the setup window stays open and explains what to
-allow or install. This uses the standard
-[Background portal](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Background.html).
-Redragon Control then starts automatically **after signing in**, including
-after a reboot. It cannot control a user's keyboard before the login screen.
-At login it stays in the tray once setup is complete; enabled services resume.
-GNOME users need an AppIndicator extension for the tray menu to be visible.
-Background services still run without a visible tray; opening the app from
-the launcher opens Settings in the running tray's session.
-
-The Flatpak's startup check also runs at login. If the keyboard is disconnected
-or access is revoked, it displays the setup window and waits for **Check again**;
-it does not start services with incomplete setup. Demo mode and read-only CLI
-commands remain available for inspection and troubleshooting.
-
-Device control requires `--device=all` to expose hidraw, input and uinput; the
-host's udev permissions still apply. This follows Flatpak's
-[device access model](https://docs.flatpak.org/en/latest/sandbox-permissions.html#device-access).
-The app has no network permission or unrestricted home/system-bus access.
-The hardware helper is bundled inside the app and exported using a file chooser;
-the Flatpak cannot silently install host system files or run commands as root.
-
-Flatpak settings live under
-`~/.var/app/io.github.redragon.Control/config/redragon-control/`.
-Existing native settings remain in `~/.config/redragon-control/`; export/import
-profiles to transfer them. The native uninstallation preserves those settings
-and the hardware rules so the Flatpak can reuse keyboard access.
-
-### Rebuild without installing the application
-
-Install `flatpak-builder` and the GNOME 50 SDK/runtime, then run from this source
-directory (the installed `org.flatpak.Builder` build tool can also be used):
-
-```bash
-flatpak install --user flathub org.gnome.Sdk//50 org.gnome.Platform//50
-flatpak-builder --user --force-clean --default-branch=stable --repo=packaging/repo packaging/build packaging/io.github.redragon.Control.json
-mkdir -p dist
-flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo packaging/repo dist/Redragon-Control-0.2.2-x86_64.flatpak io.github.redragon.Control stable
-```
-
-Dependency recipes are pinned and vendored in `packaging/shared-modules` with
-their upstream commit recorded. The bundle includes only distributable sources,
-not this checkout's virtual environment, profiles or hardware test artifacts.
-Use `flatpak build --runtime packaging/build redragon-control --version` to
-inspect the staged app without installing it.
+See [AppImage build, migration and validation notes](appimage.md) for the
+standalone build recipe, distribution requirements and old-profile migration.
+An explicit `gui` launch also uses the tray to preserve the AppImage mount.
+Use `--demo gui` to preview without starting services or writing settings.
 
 ## First launch
 
@@ -124,7 +58,7 @@ and keyboard selection; it is separate from a complete removal of user data.
 
 | Feature | Support |
 | --- | --- |
-| Whole-keyboard RGB color, brightness, off | Wired USB and 2.4 GHz, with firmware model verification |
+| Saved static color, brightness, off | 2.4 GHz only; seven presets and five brightness levels |
 | Built-in animations | 17 native effects over 2.4 GHz; five brightness/speed levels |
 | Smooth breathing | Retained native effect with seven preset colors |
 | Wheel, wheel press, other keys | Linux input remapping over USB or 2.4 GHz; Bluetooth depends on input access |
@@ -134,7 +68,7 @@ and keyboard selection; it is separate from a complete removal of user data.
 | Keyboard factory reset | Guided physical reset: **hold Fn + Esc for 3 seconds** |
 | Bluetooth RGB / on-device remapping / USB factory reset | Protocols not verified; not implemented |
 
-Wired and 2.4 GHz RGB were physically verified on this exact MAX keyboard:
+The former wired and 2.4 GHz direct RGB paths were physically verified on this exact MAX keyboard:
 the user confirmed steady teal in both connection modes, with the cable
 disconnected for the wireless test. Both connections reported firmware model
 **0x20**. The input remapping service successfully grabbed this keyboard's
@@ -142,13 +76,39 @@ real event nodes in both modes. The app checks the firmware model before
 sending lighting commands.
 The wireless receiver currently identifies as `3554:fa09`; wired mode should
 identify as `258a:010c`. These are shared chipset IDs, so the app also checks
-the HID report descriptor and firmware model before sending RGB. The receiver
+the HID report descriptor and firmware model before saving lighting. The receiver
 must additionally report the exact K686 MAX product signature.
 See [protocol provenance](protocol.md).
 
+## Omarchy appearance and source installation
+
+On Omarchy, **Automatic** follows the current desktop palette. On other
+distributions it uses the existing Adwaita appearance. Open **Menu → Appearance**
+to choose **Automatic**, **Adwaita**, or **Omarchy** explicitly. Changes apply
+immediately and persist in `config.appearance.json`, separate from keyboard
+profiles. Importing a profile does not change the app theme.
+
+Omarchy mode reads the current `colors.toml` under
+`$XDG_STATE_HOME/omarchy/current/theme/` (normally `~/.local/state/omarchy/`),
+with support for the older config-directory layout. Theme file replacement is
+watched, so a desktop theme change updates an open window. Missing/invalid
+palettes fall back to Tokyo Night colors. System high contrast takes priority.
+No Omarchy system files, shell plugins or hooks need to be modified.
+
+For a native source installation on Omarchy/Arch, install the GTK, Python and
+AppIndicator dependencies using the distribution's package manager:
+
+```bash
+omarchy pkg add python-gobject python-cairo gtk4 libadwaita python-evdev libayatana-appindicator
+./run.sh gui
+```
+
+Use the one-time hardware setup below if access is missing. The Flatpak bundles
+these application dependencies instead.
+
 ## Run on Fedora
 
-The GUI requires libadwaita 1.5 or newer, GTK 4.10 or newer, Python 3.11 or newer,
+The GUI requires libadwaita 1.5 or newer, GTK 4.12 or newer, Python 3.11 or newer,
 PyGObject, and Cairo bindings. The remapper additionally requires python-evdev.
 
 ```bash
@@ -198,18 +158,26 @@ Keep this source directory in place; the launcher points to `run.sh` here.
 
 ### Start in the system tray at login
 
-The installer also enables a login autostart entry in
+The source installer and first normal app launch enable a login autostart entry in
 `~/.config/autostart/io.github.redragon.Control.desktop`. It runs
-`redragonctl tray`, which creates an AppIndicator. Until first-run setup is
+the installed launcher with `tray`, which creates an AppIndicator. Until first-run setup is
 complete, it also opens the setup window; subsequent logins stay in the tray.
-On GNOME, its AppIndicator extension must be enabled. The indicator uses GTK3 and
+GNOME and KDE Plasma use the standard XDG autostart entry. Omarchy also gets
+`~/.config/omarchy/hooks/post-boot.d/redragon-control`, which runs after the desktop
+starts and checks the same enabled preference. No Hyprland config edits are needed.
+The tray uses a unique application ID, so overlapping startup requests share one
+instance. AppImages register their permanent file, never the temporary mount;
+launching a moved image updates its path. Keep the image in a stable location.
+Demo mode and custom `--config` launches do not automatically register startup.
+
+On GNOME, an AppIndicator extension is needed to display the tray icon;
+startup and remapping still work without the extension. The indicator uses GTK3 and
 AppIndicator in its own process; settings continue to use GTK4/libadwaita.
 Fedora's indicator dependency is `libappindicator-gtk3` (already available on
 the development machine); AyatanaAppIndicator3 is also supported.
 
-The tray restores enabled remapping on login and remembers whether lighting control
-was enabled. Its menu offers **Open settings**, independent remapping/lighting
-toggles, and **Quit and stop keyboard services**. Closing the settings window
+The tray restores enabled remapping on login. Its menu offers **Open settings**,
+a remapping toggle, and **Quit and stop keyboard services**. Closing the settings window
 leaves the tray and mappings active. Disabled services stay disabled, including
 when stopped from the CLI or the settings window. Enabled services are retried
 after reconnecting the selected keyboard or a startup permission delay.
@@ -217,8 +185,14 @@ after reconnecting the selected keyboard or a startup permission delay.
 Quit stops services for this session while preserving their next-login state.
 Use the menu toggles to persistently pause a service. Background preferences
 are stored beside settings in `config.background.json`, separate from profiles.
-To disable login autostart, remove the autostart desktop file or disable its
-entry in your desktop's startup-app settings. Launch manually with
+Old RGB background preferences are disabled and old lighting workers are stopped;
+lighting is never reapplied on a timer or at login.
+Use **Launch at login** in the tray menu, or `redragonctl autostart disable`,
+to disable startup on all three desktops. Use `redragonctl autostart enable` to
+restore it, and `redragonctl autostart status` to inspect it. AppImage users can
+pass the same `autostart` commands to their image. You can also remove the desktop
+file or disable it in your desktop's startup-app settings; normal launches preserve
+that choice. The Omarchy hook respects a missing or disabled desktop entry. Launch manually with
 `./run.sh tray`. This runs after signing into your desktop, not before the login screen.
 
 ## First use
@@ -226,9 +200,8 @@ entry in your desktop's startup-app settings. Launch manually with
 1. Follow the setup screen to detect your keyboard. The generic **CX 2.4G Wireless
    Receiver** is the current wireless connection. Setup lists known K686
    connections; the main app and CLI also list other HID devices for inspection.
-2. For RGB, use USB-C with the mode switch set to **OFF**, or use the receiver
-   with the keyboard in **2.4G** mode. Select that connection, save your
-   lighting preferences, then Apply lighting.
+2. For lighting, use the receiver with the keyboard in **2.4G** mode. Select
+   that connection, choose your lighting, then **Save to keyboard**.
 3. For the wheel, keep the knob in volume mode. Defaults emit `KEY_VOLUMEUP`,
    `KEY_VOLUMEDOWN`, and `KEY_MUTE`. Save new bindings and start the remapper.
 4. Use `observe` to identify other buttons. Fn combinations consumed internally
@@ -243,10 +216,11 @@ Rotating Storm. Reactive effects need typing to show their animation.
 The former software Breathing effect has been removed and Rainbow now selects
 the keyboard's native moving rainbow. No animation frames are streamed.
 
-Static color and Off remain available over USB and 2.4 GHz. Their temporary
-direct mode needs refreshes (2 Hz wired, 20 Hz wireless). Use **Use onboard
-lighting** to stop the lighting service and restore the original configuration.
-Closing Settings leaves the tray and enabled services active.
+Static color and Off now use saved onboard settings through the receiver.
+Static and Smooth breathing use the seven native preset colors. Arbitrary
+host RGB streaming has been removed, including its 20 Hz wireless refresh
+(nine reports per static frame). No lighting service remains active after a save.
+Closing or quitting the app leaves applied lighting on the keyboard.
 
 Choose **Smooth breathing** for a smooth fade generated by the wireless
 keyboard itself. Its preset selector offers red, green, blue, yellow, magenta,
@@ -259,22 +233,24 @@ patterns, trails, drops and twinkles for each selection. Reactive previews
 replay simulated key presses, identified below the keyboard. These are
 illustrations: onboard color variants, direction and timing may differ, and
 the preview is not synchronized with live keyboard input or firmware frames.
-Static color continues to accept arbitrary RGB colors. Old software Breathing
-profiles migrate to Smooth breathing with the nearest preset color.
+Old custom Static colors and software Breathing profiles migrate to the nearest
+preset color. Old brightness/speed values are rounded to supported 25-point steps.
 
-Built-in animation writes over USB remain unverified, so they are disabled
-when the wired connection is selected. Select the receiver and use 2.4G mode
-for animations. There is no software animation fallback.
+All persistent lighting writes over USB remain unverified, so lighting controls
+are disabled when the wired connection is selected. Use the receiver to save
+lighting. Wired key/wheel remapping still works. There is no host streaming fallback.
 
 Built-in effects change saved onboard lighting settings. Before the first
-write, the service saves the complete original configuration in
+write, the app saves the complete original configuration in
 `config.native-lighting-backup.json`, checks receiver acknowledgments, and
-verifies the result by reading it back. Stopping the lighting service restores
-and verifies the original configuration, then removes the recovery backup.
-If disconnecting or a forced shutdown interrupts recovery, the backup remains
-and the next wireless lighting start restores it before applying preferences.
-Keep this file until recovery succeeds. No palette, keymap, or firmware
-updates are sent by these modes. Recovery was verified on the user's K686 MAX.
+verifies the result by reading it back. A completed transaction is marked
+committed; closing the HID descriptor never restores or rewrites it.
+**Restore previous lighting**, or `rgb --restore`, explicitly restores and
+verifies the original configuration, then removes the backup. Failed writes
+attempt rollback; interrupted transactions retain the backup and recover before
+the next explicit lighting apply. Unchanged hardware settings do not cause
+another save. Changes preserve the keyboard's current unrelated settings.
+No palette, keymap, reset or firmware commands are sent.
 
 Remapping is applied by an unprivileged input service, not stored in firmware.
 It runs after closing the GUI until stopped, you sign out, the machine restarts,
@@ -289,6 +265,11 @@ with `link` to let the tray restore enabled services when you switch between
 them. If both are connected, the selected connection takes priority. Links
 live in `config.connections.json`; profiles do not change them. Select or
 link again if you move a connection to another USB port.
+
+Only interfaces exposing a changed binding are grabbed. Wheel-only remapping
+leaves a separate typing interface on its native input path. Binding changes
+preserve held keys and modifiers until release, and input-overflow recovery
+reconstructs unbound held keys without firing mapped shortcuts.
 
 ## CLI for users and AI agents
 
@@ -311,18 +292,22 @@ an agent's settings from your usual configuration.
 ./run.sh unbind KEY_F12
 ./run.sh daemon stop --kind all
 
-# Static color and Off work through either selected connection
+# Link the wired/receiver endpoints for input remapping
 ./run.sh select 258a:010c
 # With the receiver connected, link it to the selected wired keyboard:
 ./run.sh link 3554:fa09
-./run.sh rgb --mode static --color '#00ff88' --brightness 60 --apply
-# Select the receiver while the keyboard is in 2.4G mode for native animations
+# Select the receiver in 2.4G mode for all lighting saves
 ./run.sh select 3554:fa09
+./run.sh rgb --mode static --color '#00ffff' --brightness 75 --apply
 ./run.sh rgb --mode rainbow --brightness 75 --speed 50 --apply
 ./run.sh rgb --mode reaction --brightness 75 --speed 50 --apply
 # Smooth wireless breathing (preset colors; levels 0, 25, 50, 75, 100)
 ./run.sh rgb --mode smooth-breathing --color '#00ffff' --brightness 75 --speed 50 --apply
-./run.sh daemon stop --kind rgb
+./run.sh rgb --mode off --apply
+./run.sh rgb --restore
+./run.sh theme auto
+./run.sh theme adwaita
+./run.sh theme omarchy
 
 ./run.sh profile save Work
 ./run.sh profile export /tmp/redragon-profile.json
@@ -335,7 +320,8 @@ an agent's settings from your usual configuration.
 When two devices have the same VID:PID, select their full ID from `devices`
 (for example `3554:fa09@de64c78abcfb`); an ambiguous short ID is rejected.
 Profile import validates every setting and preserves your currently selected
-keyboard. It saves lighting preferences but does not start stopped services.
+keyboard. It saves lighting preferences without writing hardware. Apply lighting
+explicitly after importing; active remapping still reloads saved bindings.
 Bindings accept Linux `KEY_*` names, `+`-joined key chords, `scroll-up`,
 `scroll-down`, `scroll-left`, `scroll-right`, `disabled`, or `default`.
 Wheel sources can also be `REL_WHEEL_UP`, `REL_WHEEL_DOWN`,
@@ -352,8 +338,9 @@ flashing is included.
 
 Use **Recovery → Reset app settings** or `./run.sh reset app --yes` to stop
 both background services, clear local bindings, and reset lighting preferences.
-Named profiles are retained. Stopping software RGB allows the keyboard's own
-lighting to resume. Stopping input remapping restores original button events.
+Named profiles are retained. Applied onboard lighting is retained; use
+**Restore previous lighting** or `rgb --restore` to undo it. Stopping input
+remapping restores original button events.
 
 For the keyboard's actual factory settings, stop the services and hold
 **Fn + Esc for 3 seconds**, as documented in
@@ -371,17 +358,20 @@ released when a device disappears. The remapper never modifies firmware.
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-The automated suite exercises packet formatting, firmware-model rejection,
+The automated suite exercises appearance detection and persistence, palette
+validation, one-shot lighting saves, firmware-model rejection,
 device identity, event routing, chord releases, high-resolution wheel handling,
 service cleanup, configuration validation, profile isolation, and JSON CLI
 results, all native effect IDs/parameter positions, preservation of other
 settings, wireless packet framing, paired-model rejection, and explicit
 connection switching. Native UI pages and bright/dim breathing frames have
 been rendered and visually checked; GTK frame-clock animation was verified.
-Live wired and wireless model probing, static RGB, daemon keepalive and
-input-service startup have been verified. The user confirmed smooth native
+Historical wired and wireless model probing, direct static RGB, and
+input-service startup were verified before host streaming was removed. The user confirmed smooth native
 cyan breathing, the native moving Rainbow, and wireless wheel-press remapping.
 All 17 native animation selections passed actual receiver read-back. Native effect read-back,
 byte-for-byte stop recovery, restart, and idle operation without continuous
-RGB writes were verified on hardware. Event transformation edge cases,
+RGB writes were verified on hardware. The new static-preset/Off encodings and
+save-on-close behavior have automated coverage; they have not been physically
+retested in this development session. Event transformation edge cases,
 recovery failure paths, and effect generation are covered by automated tests.

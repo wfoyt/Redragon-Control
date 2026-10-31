@@ -10,13 +10,27 @@
     <p>Control your Redragon K686 MAX keyboard with native desktop settings,
     lighting effects, profiles and reversible key remapping.</p>
     <p>Includes a one-time hardware setup helper and automatic startup after
-    sign-in. Requires a Linux desktop with background portal support and
+    sign-in when supported. Requires a Linux desktop and
     udev device permissions. Independent software, not affiliated with Redragon.</p>
   </description>
   <launchable type="desktop-id">io.github.redragon.Control.desktop</launchable>
   <provides><binary>redragon-control</binary><binary>redragonctl</binary></provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.5" date="2026-10-31">
+      <description><p>Fix daemon control between AppImage mounts, keep the tray alive for explicit GUI launches, recover malformed appearance settings, and prevent closing Settings during an active operation. Retire Flatpak distribution.</p></description>
+    </release>
+    <release version="0.2.4" date="2026-10-31">
+      <description><p>Add an AppImage with bundled GTK and Python and an Enable keyboard access button with administrator authentication on the first setup page.</p></description>
+    </release>
+    <release version="0.2.3" date="2026-10-31">
+      <description>
+        <p>Add automatic Omarchy appearance with an Adwaita override. Save lighting
+        on the keyboard without continuous RGB traffic and improve input remapping.</p>
+        <p>Show the one-time hardware permission command during Flatpak setup and
+        allow manual startup on desktops without a Background portal.</p>
+      </description>
+    </release>
     <release version="0.2.2" date="2026-10-18">
       <description>
         <p>Show the keyboard selector above the lighting preview and display the

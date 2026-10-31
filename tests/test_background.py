@@ -44,12 +44,23 @@ class BackgroundTests(unittest.TestCase):
             self.supervisor.tick()
             start.assert_called_once()
 
-    def test_disconnected_service_restarts_without_duplicate_running_service(self):
+    def test_legacy_lighting_intent_is_disabled_without_restarting_rgb(self):
         self.preferences.set('rgb', True)
         self.state['daemon']['running'] = True
         with patch('redragon.background.runtime.start_daemon') as start:
             self.supervisor.tick()
-        start.assert_called_once_with(self.path, 'rgb')
+        start.assert_not_called()
+        self.assertFalse(self.preferences.read()['rgb'])
+
+    def test_legacy_lighting_worker_is_stopped_even_when_it_was_enabled(self):
+        self.preferences.set('rgb', True)
+        self.state['daemon']['running'] = True
+        self.state['lighting_daemon']['running'] = True
+        with patch('redragon.background.runtime.start_daemon') as start, \
+             patch('redragon.background.runtime.stop_daemon') as stop:
+            self.supervisor.tick()
+        start.assert_not_called()
+        stop.assert_called_once_with(self.path, 'rgb')
 
     def test_pause_persists_and_stops_running_service(self):
         self.preferences.set('remap', False)
