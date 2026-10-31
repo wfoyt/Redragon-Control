@@ -12,8 +12,8 @@ built for the **Redragon K686WBG-RGB-MAX**. No web view or Electron runtime.
 Download the x86_64 AppImage, make it executable, and run it:
 
 ```bash
-chmod +x Redragon-Control-0.2.5-x86_64.AppImage
-./Redragon-Control-0.2.5-x86_64.AppImage
+chmod +x Redragon-Control-0.2.6-x86_64.AppImage
+./Redragon-Control-0.2.6-x86_64.AppImage
 ```
 
 The app bundles Python, GTK, libadwaita, evdev and tray libraries. Flatpak
@@ -103,7 +103,7 @@ omarchy pkg add python-gobject python-cairo gtk4 libadwaita python-evdev libayat
 ./run.sh gui
 ```
 
-Use the one-time hardware setup below if access is missing. The Flatpak bundles
+Use the one-time hardware setup below if access is missing. The AppImage bundles
 these application dependencies instead.
 
 ## Run on Fedora

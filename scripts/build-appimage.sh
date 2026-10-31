@@ -32,5 +32,19 @@ install -Dm644 packaging/io.github.redragon.Control.metainfo.xml "$task_appdir/s
 chmod -R a+rX "$task_appdir"
 task_version="$(python3 -c 'from redragon import __version__; print(__version__)')"
 task_runtime_args=()
-if [[ -n "${APPIMAGE_RUNTIME_FILE:-}" ]]; then task_runtime_args=(--runtime-file "$APPIMAGE_RUNTIME_FILE"); fi
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGETOOL" "${task_runtime_args[@]}" --no-appstream --comp zstd "$task_appdir" "$PWD/dist/Redragon-Control-$task_version-x86_64.AppImage"
+if [[ -n "${APPIMAGE_RUNTIME_FILE:-}" ]]; then task_runtime_args=(--runtime-file "$(realpath "$APPIMAGE_RUNTIME_FILE")"); fi
+# Gear Lever and AppImageUpdate discover the latest stable GitHub release.
+task_update_info='gh-releases-zsync|wfoyt|Redragon-Control|latest|Redragon-Control-*-x86_64.AppImage.zsync'
+task_image="$PWD/dist/Redragon-Control-$task_version-x86_64.AppImage"
+# Do not let a stale sidecar make a build without zsyncmake look successful.
+rm -f "$task_image.zsync"
+task_tool="$(realpath "$APPIMAGETOOL")"
+# appimagetool writes the zsync sidecar in its working directory.
+(cd "$PWD/dist"
+ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$task_tool" "${task_runtime_args[@]}" --no-appstream --comp zstd --updateinformation "$task_update_info" "$task_appdir" "$task_image")
+if [[ ! -s "$task_image.zsync" ]]; then
+  echo 'Missing .zsync update file. Install zsyncmake or use appimagetool with bundled zsyncmake.' >&2
+  exit 1
+fi
+(cd "$PWD/dist"; sha256sum "$(basename "$task_image")" > "$(basename "$task_image").sha256")
+printf 'Upload all release assets:\n%s\n%s\n%s\n' "$task_image" "$task_image.zsync" "$task_image.sha256"

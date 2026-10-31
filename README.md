@@ -37,11 +37,11 @@ for the complete behavior changes and validation limits.
 
 ## Run the AppImage
 
-Download `Redragon-Control-0.2.5-x86_64.AppImage`, make it executable, and open it:
+Download `Redragon-Control-0.2.6-x86_64.AppImage`, make it executable, and open it:
 
 ```bash
-chmod +x Redragon-Control-0.2.5-x86_64.AppImage
-./Redragon-Control-0.2.5-x86_64.AppImage
+chmod +x Redragon-Control-0.2.6-x86_64.AppImage
+./Redragon-Control-0.2.6-x86_64.AppImage
 ```
 
 On the first setup page, select **Enable keyboard access** and authenticate in
@@ -55,13 +55,17 @@ Normal launching keeps the tray available when Settings closes. Saved lighting
 works with the app closed; remapping requires the app. Keep the image in a stable
 location. On the first normal launch, the app enables automatic startup after
 signing in on GNOME, KDE Plasma, and Omarchy. Turn it off with **Launch at login**
-in the tray menu, or `./Redragon-Control-0.2.5-x86_64.AppImage autostart disable`.
+in the tray menu, or `./Redragon-Control-0.2.6-x86_64.AppImage autostart disable`.
 If FUSE is unavailable, launch with `--appimage-extract-and-run`.
 
 When moving from Flatpak, export your profiles first and import them in the
 AppImage. Native/AppImage settings use `~/.config/redragon-control`; Flatpak
 settings stay under `~/.var/app/io.github.redragon.Control/`. Quit the previous
 app's keyboard services before switching distributions of the app.
+
+AppImage builds support updates through Gear Lever when the image and matching
+`.zsync` file are attached to each stable GitHub Release. See the
+[Gear Lever update instructions](docs/appimage.md#updates-through-gear-lever).
 
 See [AppImage build and validation notes](docs/appimage.md) and the
 [0.2.5 bug audit](docs/bug-audit-0.2.5.md).
@@ -131,7 +135,7 @@ been removed. Applied lighting is backed up and verified by reading it back;
 - **Need a keyboard factory reset?** Stop the app’s services, then hold
   **Fn + Esc for 3 seconds**. The Recovery page also provides guidance.
 
-For source installation, command-line controls, Flatpak builds, troubleshooting,
+For source installation, command-line controls, AppImage builds, troubleshooting,
 and development details, see the [advanced guide](docs/advanced.md).
 Hardware protocol details are in [protocol notes](docs/protocol.md).
 

@@ -17,6 +17,13 @@
   <provides><binary>redragon-control</binary><binary>redragonctl</binary></provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.6" date="2026-10-31">
+      <description>
+        <p>Move distribution from Flatpak to AppImage. Add login startup for GNOME,
+        KDE Plasma and Omarchy, a Launch at login toggle, and embedded GitHub
+        update information for Gear Lever. Publish matching update and checksum files.</p>
+      </description>
+    </release>
     <release version="0.2.5" date="2026-10-31">
       <description><p>Fix daemon control between AppImage mounts, keep the tray alive for explicit GUI launches, recover malformed appearance settings, and prevent closing Settings during an active operation. Retire Flatpak distribution.</p></description>
     </release>

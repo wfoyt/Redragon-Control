@@ -1,6 +1,7 @@
 # Omarchy and onboard-lighting changes
 
-Historical integration notes. For the current release, see the [0.2.5 bug audit](bug-audit-0.2.5.md).
+Historical integration notes. For the current release, see the [0.2.6 release notes](releases/0.2.6.md).
+Flatpak-specific behavior below describes the retired distribution, not the current app.
 
 Changes made on October 31, 2026.
 
@@ -81,10 +82,7 @@ confirmation. The application requires successful read-back before claiming a
 save succeeded. Historical native-animation hardware checks are documented in
 [protocol notes](protocol.md).
 
-The updated 0.2.3 bundle was built at
-`dist/Redragon-Control-0.2.3-x86_64.flatpak`. Its packaged version, theme
-modules, evdev dependency and hardware helper were checked in the GNOME runtime.
-The first-startup screen displays the one-time hardware setup command. An
-installed older Flatpak must be updated using the new bundle. The [advanced guide](advanced.md) includes build and native installation
-instructions. Documentation, CLI help, package metadata and screenshots were
-updated to reflect the retained capabilities.
+The historical 0.2.3 build used Flatpak. That distribution has been retired;
+use the current AppImage release instead. Export profiles from the old app and
+import them into the AppImage. See [AppImage migration instructions](appimage.md#switching-from-flatpak)
+and the [advanced guide](advanced.md) for current installation and build steps.

@@ -1,6 +1,7 @@
 # AppImage distribution
 
-Version 0.2.5 provides `dist/Redragon-Control-0.2.5-x86_64.AppImage`.
+Version 0.2.6 provides `dist/Redragon-Control-0.2.6-x86_64.AppImage`.
+See the [complete release notes](releases/0.2.6.md).
 Make it executable and launch it normally. The first keyboard-detection page
 contains **Enable keyboard access**. It authenticates through the host's Polkit
 agent and runs only the bundled hardware helper as root. Cancellation and failed
@@ -71,3 +72,39 @@ All 159 tests passed from the mounted image outside the checkout, including
 19 GTK integration tests. Real cross-mount daemon status/stop and read-only
 K686 model/configuration checks passed on Omarchy. No new lighting or firmware
 settings were written. Other distributions have not been physically tested.
+
+## Updates through Gear Lever
+
+Builds embed the GitHub update source for `wfoyt/Redragon-Control`, following
+stable releases with the filename pattern `Redragon-Control-*-x86_64.AppImage.zsync`.
+[Gear Lever recognizes this embedded metadata](https://github.com/mijorus/gearlever/blob/master/src/models/GithubUpdater.py)
+and offers updates without visiting GitHub in a browser. This does not promise
+unattended installation: users still control update checking and installation
+inside Gear Lever. Background checking is disabled by default in Gear Lever;
+users can enable it in Gear Lever's preferences.
+
+For each release:
+
+1. Update the application version and build with `scripts/build-appimage.sh`.
+2. Verify `IMAGE --appimage-updateinformation` prints the embedded source above.
+   Verify the `.zsync` header's `SHA-1` and `Length` match that exact image, and
+   run `sha256sum -c Redragon-Control-VERSION-x86_64.AppImage.sha256` from `dist/`.
+3. Attach the AppImage, matching `.AppImage.zsync`, and `.AppImage.sha256` to the
+   same GitHub Release. Keep their generated names.
+4. Publish it as a stable release and mark it as the latest release. Drafts and
+   prereleases are not selected by this update channel.
+5. Inspect the published release to confirm all three assets are downloadable.
+   A source commit or Git tag alone does not publish AppImage updates.
+
+The builder requires a generated `.zsync` sidecar and fails if it is missing.
+Use an appimagetool distribution with bundled `zsyncmake`, or install `zsyncmake`
+on the build machine. Always upload the sidecar generated alongside that exact
+AppImage; rebuilding changes its hash.
+
+Existing installations without embedded update information can configure
+[Gear Lever's GitHub update source](https://gearlever.mijorus.it/docs/github-updates/)
+once: repository `wfoyt/Redragon-Control`, release filename
+`Redragon-Control-*-x86_64.AppImage`, and prereleases disabled. Alternatively,
+install a new build containing the metadata once. Quit Redragon Control using
+**Quit and stop keyboard services** before replacing it, then relaunch it after
+updating. The relaunched app refreshes its login startup path if it changed.
