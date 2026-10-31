@@ -246,7 +246,38 @@ then open the updated image afterward.
 
 If remapping ever leaves input unusable, unplug and reconnect the keyboard.
 For further help, read the [advanced guide](docs/advanced.md) or
-[open an issue](https://github.com/wfoyt/Redragon-Control/issues).
+[report an issue](#report-an-issue).
+
+## Report an issue
+
+Found a bug or need help with something that is not covered above? You can
+report it on GitHub. You will need a free GitHub account to submit an issue.
+
+1. Check the [existing issues](https://github.com/wfoyt/Redragon-Control/issues)
+   to see whether someone has already reported the same problem. If so, add any
+   useful details to that issue.
+2. Open [a new issue](https://github.com/wfoyt/Redragon-Control/issues/new).
+3. Give it a clear title, such as **“Wheel remapping stops after reconnecting
+   the receiver.”**
+4. Describe the problem using the checklist below, then submit your issue.
+
+Include as much of this information as you can:
+
+- **App version:** the version in your AppImage filename, and whether you use
+  Gear Lever, run the AppImage manually, or run from source.
+- **Linux setup:** your distribution and desktop, such as Fedora with GNOME,
+  KDE Plasma, or Omarchy.
+- **Keyboard and connection:** the exact keyboard model and whether you are
+  using the USB cable, 2.4 GHz receiver, or Bluetooth.
+- **Steps to reproduce:** what you clicked or changed before the problem
+  appeared, and whether it happens every time.
+- **Expected and actual behavior:** what you wanted to happen and what
+  happened instead.
+- **Supporting details:** the exact error message and any relevant screenshots
+  or logs, if available. Remove personal information before sharing them.
+
+You do not need to understand the app's code to report a problem. A clear
+example of what happened is a helpful starting point.
 
 ## Documentation
 
