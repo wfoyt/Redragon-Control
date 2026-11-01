@@ -280,7 +280,7 @@ class LightingBackend:
             "message": (
                 "Lighting is saved on the keyboard over 2.4 GHz. Static and breathing use seven preset colors and five brightness levels. No background lighting traffic is needed."
                 if self._wireless else
-                "Use the K686 MAX 2.4 GHz receiver to save onboard lighting. Wired saved lighting is not verified; host streaming has been removed to protect typing. USB remapping is still available."
+                "Use the K686 MAX 2.4 GHz receiver to save onboard lighting. Wired saved lighting is not verified; host streaming has been removed to protect typing."
                 if wired else "Select the K686 USB keyboard or its 2.4 GHz receiver for RGB control."
             ),
             "factory_reset_instructions": FACTORY_RESET_INSTRUCTIONS,

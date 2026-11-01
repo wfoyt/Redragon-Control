@@ -1,7 +1,6 @@
-"""Persist background intent independently from portable keyboard profiles."""
+"""Migrate old background preferences to disabled and release legacy workers."""
 
 import json
-import time
 
 from .config import ConfigStore, atomic_write
 from .errors import ControlError
@@ -35,37 +34,17 @@ class BackgroundStore:
         return value
 
 
-class BackgroundSupervisor:
-    """Retry enabled services after login, permission delays and reconnects."""
-    def __init__(self, controller):
-        self.controller = controller
-        self.preferences = BackgroundStore(controller.store.path)
-        self.retry_after = {"remap": 0, "rgb": 0}
-        self.errors = {}
-
-    def tick(self):
-        desired = self.preferences.read()
-        # Migrate old installs away from lighting keepalives. Saved lighting
-        # survives logout and must never be rewritten on a timer or at login.
-        if desired['rgb']:
-            desired = self.preferences.set('rgb', False)
-        state = self.controller.status()
-        for kind, status_key in (("remap", "daemon"), ("rgb", "lighting_daemon")):
-            running = state[status_key]["running"]
-            if not desired[kind]:
-                self.errors.pop(kind, None)
-                if running:
-                    runtime.stop_daemon(self.controller.store.path, kind)
-            elif running:
-                self.errors.pop(kind, None)
-            elif state["device"] is not None and time.monotonic() >= self.retry_after[kind]:
-                self.retry_after[kind] = time.monotonic() + 10
-                try:
-                    runtime.start_daemon(self.controller.store.path, kind)
-                    # Respect a pause/reset requested while the process started.
-                    if not self.preferences.read()[kind]:
-                        runtime.stop_daemon(self.controller.store.path, kind)
-                    self.errors.pop(kind, None)
-                except (ControlError, OSError) as exc:
-                    self.errors[kind] = str(exc)
-        return self.controller.status()
+def retire(controller):
+    """Disable old persisted intent before stopping workers, including corrupt preferences."""
+    preferences = BackgroundStore(controller.store.path)
+    if preferences.path.exists():
+        with preferences.lock():
+            atomic_write(preferences.path, {"remap": False, "rgb": False})
+    errors = []
+    for kind in ("remap", "rgb"):
+        try:
+            runtime.stop_daemon(controller.store.path, kind)
+        except (ControlError, OSError) as exc:
+            errors.append(str(exc))
+    if errors:
+        raise ControlError("; ".join(errors))

@@ -1,3 +1,3 @@
-"""Redragon Control: native Linux keyboard settings and remapping."""
+"""Redragon Control: onboard keyboard lighting for Linux."""
 
-__version__ = "0.2.6"
+__version__ = "0.2.7"

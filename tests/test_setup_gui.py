@@ -7,6 +7,7 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
+from runtime_helpers import python_command
 
 
 @unittest.skipUnless(os.environ.get('REDRAGON_GUI_TESTS') == '1', 'requires an isolated GTK display')
@@ -53,6 +54,35 @@ class SetupGuiTests(unittest.TestCase):
         finally:
             self.window._busy = False
 
+    def test_closing_last_window_ends_foreground_process(self):
+        import subprocess
+        import sys
+        program = """
+import sys
+from redragon import gui
+from redragon.cli import main
+def run(config_path=None, demo=False):
+    app = gui.ControlApplication(config_path, demo=demo)
+    def opened(app):
+        def close_when_idle():
+            if app.window._busy:
+                return gui.GLib.SOURCE_CONTINUE
+            app.window.close()
+            return gui.GLib.SOURCE_REMOVE
+        gui.GLib.timeout_add(20, close_when_idle)
+    app.connect_after('activate', opened)
+    return app.run([])
+gui.run = run
+raise SystemExit(main(['--config', sys.argv[1], 'gui']))
+"""
+        # This exercises the real CLI, GTK application lifecycle, and worker
+        # cleanup without requiring a keyboard or changing normal preferences.
+        result = subprocess.run(python_command() + ['-c', program, str(self.path)],
+                                cwd=Path(__file__).resolve().parent.parent,
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(list(self.path.parent.glob('*.daemon.json')))
+
     def test_first_page_has_access_button_disabled_in_demo(self):
         self.assertEqual(self.window.hardware_access_button.get_label(), 'Enable keyboard access')
         self.assertFalse(self.window.hardware_access_button.get_sensitive())
@@ -70,34 +100,15 @@ class SetupGuiTests(unittest.TestCase):
             window._advance_setup()
         lighting.assert_not_called()
         self.assertEqual(window._setup_step, 2)
-        window._binding_editors['KEY_MUTE'].set_active_id('KEY_PLAYPAUSE')
-        window._setup_bindings['KEY_A'] = 'KEY_B'
-        window._advance_setup()
-        self.assertEqual(window._setup_step, 3)
-        self.assertEqual(window.controller._config()['bindings'], {})
-        self.assertEqual(window._binding_editors['KEY_MUTE'].get_active_id(), 'default')
         window._advance_setup(); self.settle()
         self.assertFalse(window._in_setup)
         self.assertEqual(window.root_stack.get_visible_child_name(), 'control')
         self.assertIsNotNone(window.stack.get_child_by_name('lighting'))
-        self.assertIsNotNone(window.stack.get_child_by_name('buttons'))
+        self.assertIsNone(window.stack.get_child_by_name('buttons'))
         self.assertEqual([page.get_name() for page in window.stack.get_pages()],
-                         ['lighting', 'buttons', 'recovery'])
+                         ['lighting', 'recovery'])
         self.assertFalse(window.setup_store.completed(), 'demo must not save completion')
         self.assertFalse(self.path.exists(), 'demo must not write settings')
-
-    def test_save_combines_wheel_and_custom_keys_and_starts_remapping(self):
-        window = self.window
-        window._show_setup_step(2)
-        window._setup_bindings['KEY_A'] = 'KEY_B'
-        window._binding_editors['KEY_MUTE'].set_active_id('KEY_PLAYPAUSE')
-        window._apply_setup(); self.settle()
-        self.assertEqual(window._setup_step, 2)
-        self.assertEqual(window.controller._config()['bindings'],
-                         {'KEY_A': 'KEY_B', 'KEY_MUTE': 'KEY_PLAYPAUSE'})
-        self.assertTrue(window.controller._demo_running)
-        window._advance_setup()
-        self.assertEqual(window._setup_step, 3)
 
     def test_apply_lighting_stays_on_page_until_next(self):
         window = self.window
@@ -149,7 +160,7 @@ class SetupGuiTests(unittest.TestCase):
         with patch.object(window.controller, 'apply_lighting') as lighting, \
              patch.object(window.controller, 'start_daemon') as remap:
             window._load_setup_profile(source); self.settle()
-        self.assertEqual(window._setup_step, 3)
+        self.assertEqual(window._setup_step, 2)
         self.assertTrue(window._in_setup)
         self.assertFalse(window.setup_store.completed())
         self.assertEqual(window.controller._config()['device_id'], selected)
@@ -175,7 +186,7 @@ class SetupGuiTests(unittest.TestCase):
 
     def test_real_completion_is_saved_and_reenables_profile_actions(self):
         window = self.window
-        window._show_setup_step(3)
+        window._show_setup_step(2)
         state = dict(window.state, demo=False)
         # Use the real completion file, with hardware status isolated.
         window.controller.demo = False
@@ -201,7 +212,7 @@ class SetupGuiTests(unittest.TestCase):
         preview_ok, preview = window.preview.compute_bounds(window)
         self.assertTrue(selector_ok and preview_ok)
         self.assertLessEqual(selector.get_y() + selector.get_height(), preview.get_y())
-        for name in ('buttons', 'recovery'):
+        for name in ('recovery',):
             window.stack.set_visible_child_name(name); self.settle()
             self.assertFalse(window.preview.get_mapped())
             self.assertTrue(window.device_dropdown.get_mapped())
@@ -250,32 +261,6 @@ class SetupGuiTests(unittest.TestCase):
                 time.sleep(.005)
 
 
-    def test_lighting_save_preserves_unsaved_wheel_actions(self):
-        window = self.window
-        window._finish_setup(); self.settle()
-        editor = window._binding_editors['KEY_MUTE']
-        editor.set_active_id('KEY_PLAYPAUSE')
-        window.color_entry.set_text('#00ff00')
-        window._save_lighting(); self.settle()
-        self.assertEqual(window.controller._config()['lighting']['color'], '#00ff00')
-        self.assertEqual(editor.get_active_id(), 'KEY_PLAYPAUSE')
-        self.assertEqual(window.controller._config()['bindings'], {})
-
-    def test_binding_and_runtime_changes_preserve_unsaved_edits(self):
-        window = self.window
-        window._finish_setup(); self.settle()
-        editor = window._binding_editors['KEY_MUTE']
-        editor.set_active_id('KEY_PLAYPAUSE')
-        window.color_entry.set_text('#00ff00')
-        window._run(lambda: window.controller.set_binding('KEY_A', 'KEY_B')); self.settle()
-        self.assertEqual(editor.get_active_id(), 'KEY_PLAYPAUSE')
-        window._save_wheel(); self.settle()
-        self.assertEqual(window.controller._config()['bindings'],
-                         {'KEY_A': 'KEY_B', 'KEY_MUTE': 'KEY_PLAYPAUSE'})
-        window._toggle_remapper(); self.settle()
-        self.assertEqual(window.color_entry.get_text(), '#00ff00')
-        self.assertNotEqual(window.controller._config()['lighting']['color'], '#00ff00')
-
     def test_importing_same_profile_discards_unsaved_edits(self):
         from redragon.config import atomic_write
         window = self.window
@@ -284,27 +269,9 @@ class SetupGuiTests(unittest.TestCase):
         profile = self.path.parent / 'saved.json'
         atomic_write(profile, saved)
         window.color_entry.set_text('#00ff00')
-        window._binding_editors['KEY_MUTE'].set_active_id('KEY_PLAYPAUSE')
         with patch.object(window, '_file_dialog', side_effect=lambda save, callback: callback(profile)):
             window._import_profile(); self.settle()
         self.assertEqual(window.color_entry.get_text(), saved['lighting']['color'])
-        self.assertEqual(window._binding_editors['KEY_MUTE'].get_active_id(), 'default')
-
-    def test_adding_wheel_binding_in_setup_updates_editor_and_saves(self):
-        from redragon.gui import Adw
-        window = self.window
-        window._show_setup_step(2)
-        dialogs = []
-        with patch.object(Adw.AlertDialog, 'present', new=lambda dialog, parent: dialogs.append(dialog)):
-            window._add_binding()
-        dialog = dialogs[0]
-        source = dialog.get_extra_child().get_first_child()
-        source.set_text('KEY_MUTE')
-        source.get_next_sibling().set_text('KEY_PLAYPAUSE')
-        dialog.emit('response', 'save')
-        self.assertEqual(window._binding_editors['KEY_MUTE'].get_active_id(), 'KEY_PLAYPAUSE')
-        window._apply_setup(); self.settle()
-        self.assertEqual(window.controller._config()['bindings'], {'KEY_MUTE': 'KEY_PLAYPAUSE'})
 
     def test_editors_are_disabled_during_an_operation_and_restored_on_failure(self):
         window = self.window

@@ -1,22 +1,13 @@
-"""Supervision of the unprivileged, recoverable input remapping process."""
+"""Identify and stop legacy keyboard workers. Never start input interception."""
 
 import fcntl
 import json
 import os
 from pathlib import Path
 import signal
-import subprocess
-import sys
-import threading
 import time
 
-from .config import atomic_write, ConfigStore
 from .errors import ControlError
-
-
-def python_command():
-    launcher = os.environ.get('REDRAGON_APPIMAGE_LAUNCHER')
-    return [launcher, '--python'] if launcher else [sys.executable]
 
 
 def runtime_paths(config_path, kind="remap"):
@@ -59,44 +50,6 @@ def daemon_status(config_path, kind="remap"):
         return {"running": False, "log": str(log)}
 
 
-def start_daemon(config_path, kind="remap"):
-    if kind == 'rgb':
-        raise ControlError('Lighting no longer needs a daemon. Use rgb --apply to save it on the keyboard.')
-    config_path = Path(config_path).resolve()
-    current = daemon_status(config_path, kind)
-    if current["running"]:
-        return current
-    store = ConfigStore(config_path)
-    config = store.read()
-    if not config["device_id"]:
-        raise ControlError("Select your keyboard before starting remapping.")
-    # Materialize default settings so the service always has a file to watch.
-    if not store.path.exists():
-        store.replace(config)
-    metadata, lock, log = runtime_paths(config_path, kind)
-    log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    env = os.environ.copy()
-    package_root = str(Path(__file__).resolve().parent.parent)
-    env["PYTHONPATH"] = package_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    with log.open("a") as output:
-        os.chmod(log, 0o600)
-        process = subprocess.Popen(
-            python_command() + ["-m", "redragon", "--config", str(config_path), "daemon", "run", "--kind", kind],
-            stdin=subprocess.DEVNULL, stdout=output, stderr=output, env=env, start_new_session=True,
-        )
-    deadline = time.monotonic() + (15 if kind == 'rgb' else 5)
-    while time.monotonic() < deadline:
-        current = daemon_status(config_path, kind)
-        if current.get("ready"):
-            return current
-        if process.poll() is not None:
-            detail = log.read_text(errors="replace")[-2000:].strip()
-            raise ControlError(f"Remapper could not start. {detail}")
-        time.sleep(0.05)
-    stop_daemon(config_path, kind)
-    raise ControlError(f"Remapper did not become ready; see {log}.")
-
-
 def stop_daemon(config_path, kind="remap"):
     current = daemon_status(config_path, kind)
     if not current["running"]:
@@ -113,53 +66,82 @@ def stop_daemon(config_path, kind="remap"):
     raise ControlError(f"Remapper PID {current['pid']} did not stop; inspect its log before retrying.")
 
 
-def run_daemon(config_path, kind="remap"):
-    from .remap import RemapDaemon
-
-    config_path = Path(config_path).resolve()
-    metadata, lock_path, log = runtime_paths(config_path, kind)
-    lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    stopped = threading.Event()
-    for signum in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(signum, lambda *_: stopped.set())
-    with lock_path.open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise ControlError("The remapper is already running for this configuration.") from exc
-        atomic_write(metadata, {"pid": os.getpid(), "ready": False})
-        try:
-            def ready():
-                atomic_write(metadata, {"pid": os.getpid(), "ready": True})
-            if kind == "rgb":
-                run_lighting(config_path, stopped, ready)
-            else:
-                RemapDaemon(config_path, stopped, on_ready=ready).run()
-        finally:
-            metadata.unlink(missing_ok=True)
-
-
 def lighting_frame(settings, elapsed):
     """Compatibility alias for the UI preview renderer; not sent to hardware."""
     from .lighting import render_frame
     return render_frame(settings, elapsed)
 
 
-def run_lighting(config_path, stopped, ready):
-    from .devices import resolve_config_device
-    from .lighting import LightingBackend
+def start_daemon(config_path, kind="remap"):
+    raise ControlError("Background keyboard services and input remapping have been removed. Use rgb --apply to save lighting once.")
 
-    store = ConfigStore(config_path)
-    backend = None
-    try:
-        if not stopped.is_set():
-            config = store.read()
-            if not config["device_id"]:
-                raise ControlError("Lighting stopped: no keyboard selected.")
-            active_device = resolve_config_device(store.path, config['device_id'])
-            backend = LightingBackend(active_device)
-            backend.apply_native(config['lighting'], store.path)
-            ready()
-    finally:
-        if backend and hasattr(backend, "close"):
-            backend.close()
+
+def run_daemon(config_path, kind="remap"):
+    return start_daemon(config_path, kind)
+
+
+def _legacy_tray(process, config_path):
+    """Match only this user's old Python/module launcher for this configuration."""
+    if process.name == str(os.getpid()) or process.stat().st_uid != os.getuid():
+        return False
+    argv = (process / 'cmdline').read_bytes().decode().rstrip('\x00').split('\x00')
+    if not argv:
+        return False
+    legacy_gui_routing = False
+    if Path(argv[0]).name == 'ld-linux-x86-64.so.2':
+        root = Path(argv[0]).parents[3]
+        libs = ':'.join(str(root / p) for p in ('lib', 'usr/lib/x86_64-linux-gnu', 'usr/lib'))
+        prefix = [str(root / 'usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'),
+                  '--library-path', libs, str(root / 'usr/bin/python3'), '-P']
+        if argv[:5] != prefix or (process / 'exe').resolve() != Path(argv[0]).resolve():
+            return False
+        arguments = argv[5:]
+        # A second launch of the new foreground app must activate its window,
+        # not terminate it. Only old mounted entry points rewrote GUI to tray.
+        entry = root / 'lib/redragon-control/redragon/appimage_entry.py'
+        legacy_gui_routing = "['tray', '--open-settings']" in entry.read_text()
+    elif Path(argv[0]).name.startswith('python'):
+        arguments = argv[1:]
+    else:
+        return False
+    from .config import default_path
+    tails = [['--config', str(Path(config_path).resolve()), 'tray']]
+    configurations = [['--config', str(Path(config_path).resolve())]]
+    if Path(config_path).resolve() == default_path().resolve():
+        tails.append(['tray'])
+        configurations.append([])
+    # Older AppImages routed their original GUI argv to the tray internally.
+    if legacy_gui_routing and any(arguments == ['-m', 'redragon.appimage_entry'] + config + command
+           for config in configurations for command in ([], ['gui'])):
+        return True
+    return any(arguments == ['-m', module] + tail + suffix
+               for module in ('redragon', 'redragon.appimage_entry')
+               for tail in tails for suffix in ([], ['--open-settings']))
+
+
+def stop_legacy_trays(config_path):
+    pending = []
+    for process in Path('/proc').iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            if _legacy_tray(process, config_path):
+                os.kill(int(process.name), signal.SIGTERM)
+                pending.append(process)
+        except (OSError, ValueError, IndexError):
+            continue
+    deadline = time.monotonic() + 6
+    while pending:
+        remaining = []
+        for process in pending:
+            try:
+                if _legacy_tray(process, config_path):
+                    remaining.append(process)
+            except (OSError, ValueError, IndexError):
+                pass
+        if not remaining:
+            return
+        if time.monotonic() >= deadline:
+            raise ControlError('An older tray is still running. Quit it with “Quit and stop keyboard services”, then reopen this app.')
+        pending = remaining
+        time.sleep(0.05)

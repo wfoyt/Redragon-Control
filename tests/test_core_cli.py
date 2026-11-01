@@ -15,7 +15,6 @@ from redragon.config import ConfigStore, DEFAULTS, atomic_write
 from redragon.core import Controller
 from redragon.devices import DeviceSelectionError
 from redragon.errors import ControlError
-from redragon.remap import RemapError
 from redragon import runtime
 
 
@@ -39,7 +38,6 @@ class CoreCliTests(unittest.TestCase):
 
     def test_backend_errors_share_the_user_facing_exception_contract(self):
         self.assertTrue(issubclass(DeviceSelectionError, ControlError))
-        self.assertTrue(issubclass(RemapError, ControlError))
 
     def test_selection_error_is_machine_readable_json(self):
         with patch("redragon.core.discover_devices", return_value=[]):
@@ -90,8 +88,8 @@ class CoreCliTests(unittest.TestCase):
             state = controller.status()
             controller.select_device(state["device"]["id"])
             controller.set_lighting(mode="rainbow", apply=True)
-            controller.set_binding("KEY_MUTE", "KEY_PLAYPAUSE")
-            controller.start_daemon()
+            with self.assertRaises(ControlError):
+                controller.start_daemon()
             controller.stop_all()
             controller.factory_reset()
             controller.reset_app()
@@ -144,25 +142,6 @@ class CoreCliTests(unittest.TestCase):
             self.assertGreater(len(levels) if mode == "breathing" else len(colours), 1)
             self.assertEqual(settings["mode"], mode)
 
-    def test_lighting_worker_closes_backend_when_cancelled(self):
-        value = deepcopy(DEFAULTS)
-        value["device_id"] = DEVICE["id"]
-        value["lighting"]["mode"] = "rainbow"
-        ConfigStore(self.path).replace(value)
-        stopped = threading.Event()
-        with patch("redragon.devices.resolve_config_device", return_value=DEVICE), \
-             patch("redragon.lighting.LightingBackend") as backend_type, \
-             patch('redragon.runtime.lighting_frame',side_effect=AssertionError('Host animation frame sent')):
-            backend = backend_type.return_value
-            backend.apply_native.side_effect = lambda *_: stopped.set()
-            ready = []
-            runtime.run_lighting(self.path, stopped, lambda: ready.append(True))
-            self.assertEqual(backend.apply_native.call_count, 1)
-            self.assertEqual(backend.apply_native.call_args.args[0]["mode"], "rainbow")
-            backend.apply.assert_not_called()
-            backend.close.assert_called_once_with()
-            self.assertEqual(ready, [True])
-
     def test_runtime_will_not_treat_another_command_or_service_as_its_daemon(self):
         metadata, lock_path, _ = runtime.runtime_paths(self.path, "rgb")
         atomic_write(metadata, {"pid": os.getpid(), "ready": True})
@@ -177,19 +156,6 @@ class CoreCliTests(unittest.TestCase):
             for argv in invalid_argv:
                 with self.subTest(argv=argv), patch("redragon.runtime.Path.read_bytes", return_value="\0".join(argv).encode() + b"\0"):
                     self.assertFalse(runtime.daemon_status(self.path, "rgb")["running"])
-
-    def test_start_enables_background_before_process_start_and_restores_on_failure(self):
-        from redragon.background import BackgroundStore
-        background = BackgroundStore(self.path)
-        background.set("remap", False)
-        def failed_start(*_):
-            self.assertTrue(background.read()["remap"])
-            raise ControlError("Cannot start input service")
-        with patch("redragon.core.runtime.start_daemon", side_effect=failed_start):
-            with self.assertRaises(ControlError):
-                Controller(self.path).start_daemon()
-        self.assertFalse(background.read()["remap"])
-
 
     def test_lighting_is_saved_once_without_starting_a_background_service(self):
         from redragon.background import BackgroundStore
@@ -223,7 +189,7 @@ class CoreCliTests(unittest.TestCase):
         self.assertEqual(Controller(self.path).appearance()['theme'], 'adwaita')
 
     def test_rgb_daemon_start_is_rejected_to_prevent_streaming(self):
-        with self.assertRaisesRegex(ControlError, 'no longer needs a daemon'):
+        with self.assertRaisesRegex(ControlError, 'have been removed'):
             runtime.start_daemon(self.path, 'rgb')
 
 

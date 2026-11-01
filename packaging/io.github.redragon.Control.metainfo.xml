@@ -2,21 +2,24 @@
 <component type="desktop-application">
   <id>io.github.redragon.Control</id>
   <name>Redragon Control</name>
-  <summary>Lighting and key remapping for Redragon K686 MAX keyboards</summary>
+  <summary>Saved lighting for Redragon K686 MAX keyboards</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <developer id="io.github.redragon"><name>Redragon Control contributors</name></developer>
   <description>
     <p>Control your Redragon K686 MAX keyboard with native desktop settings,
-    lighting effects, profiles and reversible key remapping.</p>
-    <p>Includes a one-time hardware setup helper and automatic startup after
-    sign-in when supported. Requires a Linux desktop and
+    saved lighting effects and reusable profiles.</p>
+    <p>Includes a one-time hardware setup helper. Keyboard access is limited to
+    explicit lighting saves; closing the window quits the app. Requires a Linux desktop and
     udev device permissions. Independent software, not affiliated with Redragon.</p>
   </description>
   <launchable type="desktop-id">io.github.redragon.Control.desktop</launchable>
   <provides><binary>redragon-control</binary><binary>redragonctl</binary></provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.7" date="2026-11-01">
+      <description><p>Save onboard lighting only. Remove input remapping, tray and login startup; close the window to quit. Disable legacy startup and stop old workers.</p></description>
+    </release>
     <release version="0.2.6" date="2026-10-31">
       <description>
         <p>Move distribution from Flatpak to AppImage. Add login startup for GNOME,

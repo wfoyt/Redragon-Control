@@ -62,14 +62,6 @@ class SetupTests(unittest.TestCase):
             self.controller.detect_keyboard()
         select.assert_called_once_with(keyboard['id'])
 
-    def test_invalid_binding_does_not_partially_save_setup(self):
-        value = deepcopy(DEFAULTS)
-        value['bindings'] = {'KEY_MUTE': 'KEY_PLAYPAUSE'}
-        ConfigStore(self.path).replace(value)
-        with self.assertRaises(ControlError):
-            self.controller.set_bindings({'KEY_A': 'KEY_B', 'KEY_C': 'invalid'})
-        self.assertEqual(ConfigStore(self.path).read(), value)
-
 
 if __name__ == '__main__':
     unittest.main()

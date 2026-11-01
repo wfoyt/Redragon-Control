@@ -4,14 +4,14 @@ from copy import deepcopy
 from pathlib import Path
 import re
 
-from .config import ConfigStore, DEFAULTS, atomic_write, read_json, validate_binding
+from .config import ConfigStore, DEFAULTS, atomic_write, read_json
 from .devices import discover_devices, resolve_device, resolve_config_device, ConnectionStore
 from .errors import ControlError
 from . import runtime
 
 RESET_MESSAGE = (
     "On the K686 MAX, hold Fn + Esc for 3 seconds to restore the keyboard's factory defaults. "
-    "Stop this app's remapper first. The Fn key is handled inside the keyboard, so software cannot "
+    "Close the app first. The Fn key is handled inside the keyboard, so software cannot "
     "press this combination for you. This erases the keyboard's custom settings."
 )
 MANUAL_URL = "https://cdn.shopify.com/s/files/1/0012/4957/4961/files/K686_user_manual.pdf?v=1723515517"
@@ -58,21 +58,20 @@ class Controller:
         return LightingBackend(self._device())
 
     def status(self):
-        from .background import BackgroundStore
         device = self._device()
         if self.demo:
-            capabilities = {"rgb": True, "factory_reset": False, "remap": True, "modes": ["static", "off"]}
+            capabilities = {"rgb": True, "factory_reset": False, "remap": False, "modes": ["static", "off"]}
             message = "Demo preview. Changes here do not affect your keyboard or saved settings."
         else:
             capabilities = self._lighting().capabilities()
             message = capabilities.get("message", "")
-            capabilities["remap"] = bool(device and device["event_paths"])
+            capabilities["remap"] = False
         return {"device": device, "devices": self._devices(), "config": self._config(),
                 "capabilities": capabilities, "rgb_message": message,
                 "factory_reset_message": RESET_MESSAGE, "manual_url": MANUAL_URL,
                 "daemon": {"running": self._demo_running} if self.demo else runtime.daemon_status(self.store.path),
                 "lighting_daemon": {"running": False} if self.demo else runtime.daemon_status(self.store.path, "rgb"),
-                "background": {"remap": False, "rgb": False} if self.demo else BackgroundStore(self.store.path).read(),
+                "background": {"remap": False, "rgb": False},
                 "linked_device_ids": [] if self.demo else ConnectionStore(self.store.path).aliases(self._config()["device_id"]),
                 "lighting_state": {} if self.demo else self._saved_lighting_state(),
                 "appearance": self.appearance(), "demo": self.demo}
@@ -124,13 +123,6 @@ class Controller:
         ids = {anchor.split("@")[0], device["id"].split("@")[0]}
         if ids != {"258a:010c", "3554:fa09"}:
             raise ControlError("Link only the K686 wired connection and its 2.4 GHz receiver.")
-        from .lighting import LightingBackend
-        backend = LightingBackend(device)
-        try:
-            if not backend.probe()["supported"]:
-                raise ControlError("The alternate connection did not identify as a K686.")
-        finally:
-            backend.close()
         return {"linked_device_ids": ConnectionStore(self.store.path).link(anchor, device["id"])}
 
     def set_lighting(self, mode=None, color=None, brightness=None, speed=None, apply=False):
@@ -145,8 +137,8 @@ class Controller:
     def apply_lighting(self):
         if self.demo:
             return {"applied": False, "demo": True, "message": "Demo preview only."}
-        # Stop legacy keepalive workers before the single saved transaction.
-        self.stop_lighting()
+        # Stop old input/tray workers before the single lighting transaction.
+        self.retire_background()
         backend = self._lighting()
         try:
             if not backend.capabilities()['rgb']:
@@ -160,23 +152,12 @@ class Controller:
     def restore_lighting(self):
         if self.demo:
             return {'restored': False, 'demo': True}
-        self.stop_lighting()
+        self.retire_background()
         backend = self._lighting()
         try:
             return backend.restore_native(self.store.path)
         finally:
             backend.close()
-
-    def set_binding(self, source, target):
-        validate_binding(source, target)
-        return self._update(lambda config: config["bindings"].update({source: target}))
-
-    def remove_binding(self, source):
-        return self._update(lambda config: config["bindings"].pop(source, None))
-
-    def set_bindings(self, bindings):
-        """Validate and save a complete binding selection in one transaction."""
-        return self._update(lambda config: config.update(bindings=deepcopy(bindings)))
 
     def detect_keyboard(self):
         """Select a sole connected keyboard; leave ambiguous choices to the user."""
@@ -192,18 +173,23 @@ class Controller:
         return state
 
     def start_daemon(self):
+        raise ControlError("Key and wheel remapping have been removed because they require continuous input interception, which can cause missed or repeated keystrokes.")
+
+    def retire_background(self):
         if self.demo:
-            self._demo_running = True
-            return {"running": True, "demo": True}
-        from .background import BackgroundStore
-        previous = BackgroundStore(self.store.path).read()["remap"]
-        self._background_enabled("remap", True)
+            return
+        from .config import default_path
+        if self.store.path.resolve() == default_path().resolve():
+            from .autostart import disable
+            disable()
+        from .background import retire
+        from .runtime import stop_legacy_trays
         try:
-            result = runtime.start_daemon(self.store.path)
-        except Exception:
-            self._background_enabled("remap", previous)
-            raise
-        return result
+            stop_legacy_trays(self.store.path)
+        finally:
+            # Disable persisted intent and release input even if an old tray
+            # cannot finish quitting; it must not keep restarting workers.
+            retire(self)
 
     def _background_enabled(self, kind, enabled):
         if not self.demo:
@@ -224,7 +210,8 @@ class Controller:
         return runtime.stop_daemon(self.store.path, "rgb")
 
     def stop_all(self):
-        return {"remap": self.stop_daemon(), "rgb": self.stop_lighting()}
+        self.retire_background()
+        return {"remap": {"running": False}, "rgb": {"running": False}}
 
     def reset_app(self):
         self.stop_all()
@@ -257,9 +244,7 @@ class Controller:
         else:
             self.store.update(lambda current: current.update(lighting=config["lighting"], bindings=config["bindings"]))
         return {"imported": str(Path(path).resolve()), "applied": False,
-                "live_reload": {"remap": False, "rgb": False} if self.demo else
-                    {"remap": runtime.daemon_status(self.store.path)["running"],
-                     "rgb": False}}
+                "live_reload": {"remap": False, "rgb": False}}
 
     def _profile_path(self, name):
         if not isinstance(name, str) or not re.fullmatch(r"[\w -]{1,64}", name) or name in (".", ".."):

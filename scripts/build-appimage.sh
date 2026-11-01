@@ -22,7 +22,7 @@ cp -r data "$task_appdir/lib/redragon-control/"
 find "$task_appdir/lib/redragon-control/redragon" -type d -name __pycache__ -prune -exec rm -rf {} +
 install -Dm644 scripts/setup-hardware.sh "$task_appdir/share/redragon-control/setup-hardware.sh"
 install -m755 packaging/appimage/AppRun "$task_appdir/AppRun"
-sed 's|@LAUNCHER@|AppRun|; s|Exec=AppRun tray|Exec=AppRun tray --open-settings|' data/io.github.redragon.Control.desktop.in > "$task_appdir/io.github.redragon.Control.desktop"
+sed 's|@LAUNCHER@|AppRun|' data/io.github.redragon.Control.desktop.in > "$task_appdir/io.github.redragon.Control.desktop"
 cp data/io.github.redragon.Control.svg "$task_appdir/"
 rsvg-convert -w 256 -h 256 data/io.github.redragon.Control.svg -o "$task_appdir/io.github.redragon.Control.png"
 ln -sf io.github.redragon.Control.png "$task_appdir/.DirIcon"

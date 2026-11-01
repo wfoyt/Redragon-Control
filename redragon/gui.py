@@ -18,7 +18,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from . import __version__
 from .core import Controller  # noqa: E402
-from .config import MODES, NATIVE_COLORS, validate_binding  # noqa: E402
+from .config import MODES, NATIVE_COLORS  # noqa: E402
 from .errors import ControlError  # noqa: E402
 from .effects import MODE_LABELS, NATIVE_EFFECTS  # noqa: E402
 from .preview import EFFECT_DESCRIPTIONS, REACTIVE_MODES, sample  # noqa: E402
@@ -28,28 +28,6 @@ from .ui_theme import ThemeManager  # noqa: E402
 
 
 APP_ID = "io.github.redragon.Control"
-PRESET_SOURCES = (
-    ("KEY_VOLUMEUP", "Wheel up", "Turn the wheel upward"),
-    ("KEY_VOLUMEDOWN", "Wheel down", "Turn the wheel downward"),
-    ("KEY_MUTE", "Wheel press", "Press the wheel / mute button"),
-)
-TARGETS = (
-    "KEY_VOLUMEUP", "KEY_VOLUMEDOWN", "KEY_MUTE", "KEY_PLAYPAUSE",
-    "KEY_NEXTSONG", "KEY_PREVIOUSSONG", "KEY_BRIGHTNESSUP",
-    "KEY_BRIGHTNESSDOWN", "KEY_LEFTCTRL+KEY_LEFTALT+KEY_T", "scroll-up",
-    "scroll-down", "default", "disabled",
-)
-TARGET_LABELS = {
-    "KEY_VOLUMEUP": "Volume up", "KEY_VOLUMEDOWN": "Volume down",
-    "KEY_MUTE": "Mute / unmute", "KEY_PLAYPAUSE": "Play / pause",
-    "KEY_NEXTSONG": "Next track", "KEY_PREVIOUSSONG": "Previous track",
-    "KEY_BRIGHTNESSUP": "Screen brightness up",
-    "KEY_BRIGHTNESSDOWN": "Screen brightness down",
-    "KEY_LEFTCTRL+KEY_LEFTALT+KEY_T": "Ctrl + Alt + T",
-    "scroll-up": "Scroll up", "scroll-down": "Scroll down",
-    "default": "Keep default action", "disabled": "Disable this control",
-}
-
 CSS = """
 .hero-card { border-radius: 18px; background: alpha(@accent_bg_color, .08); }
 .hero-title { font-size: 25px; font-weight: 800; letter-spacing: -.5px; }
@@ -88,16 +66,6 @@ def _button(label=None, icon=None, css_class=None):
 def _lighting(config):
     lighting = config.get("lighting", {})
     return lighting if isinstance(lighting, dict) else {}
-
-
-def _bindings(config):
-    bindings = config.get("bindings", {})
-    if isinstance(bindings, dict):
-        return bindings
-    if isinstance(bindings, list):
-        return {item["source"]: item["target"] for item in bindings
-                if isinstance(item, dict) and "source" in item and "target" in item}
-    return {}
 
 
 class KeyboardPreview(Gtk.DrawingArea):
@@ -223,11 +191,9 @@ class ControlWindow(Adw.ApplicationWindow):
         self._busy = False
         self._updating = False
         self._device_ids = []
-        self._binding_editors = {}
         self.setup_store = SetupStore(controller.store.path)
         self._in_setup = controller.demo or not self.setup_store.completed()
         self._setup_step = 0
-        self._setup_bindings = {}
         self._setup_profile_imported = False
         self._setup_import_pending = False
         self.set_default_size(980, 900)
@@ -308,7 +274,6 @@ class ControlWindow(Adw.ApplicationWindow):
         self.stack.set_vexpand(True)
         content.append(self.stack)
         self._build_lighting()
-        self._build_buttons()
         self._build_recovery()
         if self._in_setup:
             self._build_setup(device_clamp)
@@ -331,7 +296,7 @@ class ControlWindow(Adw.ApplicationWindow):
         eyebrow.add_css_class("accent")
         hero_copy.append(eyebrow)
         hero_copy.append(_label("Make it yours.", "hero-title"))
-        hero_copy.append(_label("Lighting, wheel actions, and key bindings.\nDesigned for your Linux desktop.", "dim-label", wrap=True))
+        hero_copy.append(_label("Save lighting on your keyboard.\nClose the window to quit.", "dim-label", wrap=True))
         status_line = _box(Gtk.Orientation.HORIZONTAL, 8)
         self.connection_pill = _label("Finding keyboard…", "status-pill")
         status_line.append(self.connection_pill)
@@ -385,20 +350,18 @@ class ControlWindow(Adw.ApplicationWindow):
         self.setup_import.set_halign(Gtk.Align.CENTER)
         self.setup_import.connect("clicked", self._import_setup_profile)
         detection.append(self.setup_import)
-        detection.append(_label("Restore saved lighting and key bindings, then go straight to Welcome.\nImported preferences can be applied from the main app.",
+        detection.append(_label("Restore saved lighting preferences, then go straight to Welcome.\nImported preferences can be applied from the main app.",
                                 "dim-label", wrap=True, xalign=.5))
         self.setup_pages.add_named(detection, "detect")
 
         self._setup_shared_pages = []
-        for name, title, icon in (("lighting", "Lighting", "weather-clear-night-symbolic"),
-                                  ("buttons", "Buttons & wheel", "input-mouse-symbolic")):
+        for name, title, icon in (("lighting", "Lighting", "weather-clear-night-symbolic"),):
             widget = self.stack.get_child_by_name(name)
             self.stack.remove(widget)
             self.setup_pages.add_named(widget, name)
             self._setup_shared_pages.append((widget, name, title, icon))
         lighting_page = self.lighting_page
-        self._setup_hidden_widgets = (self.lighting_actions, self.lighting_runtime,
-                                      self.remapper_row, self.wheel_actions)
+        self._setup_hidden_widgets = (self.lighting_actions, self.lighting_runtime)
         for widget in self._setup_hidden_widgets:
             widget.set_visible(False)
         self._lighting_subtitle = lighting_page.get_first_child().get_last_child()
@@ -409,7 +372,7 @@ class ControlWindow(Adw.ApplicationWindow):
         welcome.set_valign(Gtk.Align.CENTER)
         welcome.append(Gtk.Image(icon_name="input-keyboard-symbolic", pixel_size=72))
         welcome.append(_label("Welcome to Redragon Control", "hero-title", wrap=True, xalign=.5))
-        welcome.append(_label("Your keyboard, your way.\nYou can adjust lighting, wheel actions, and key bindings whenever you like.",
+        welcome.append(_label("Your keyboard, your way.\nSave lighting on your keyboard, then close the app.\nNothing runs in the background.",
                               "dim-label", wrap=True, xalign=.5))
         self.setup_summary = _label("", wrap=True, xalign=.5)
         welcome.append(self.setup_summary)
@@ -442,13 +405,13 @@ class ControlWindow(Adw.ApplicationWindow):
         if self._busy:
             return
         self._setup_step = step
-        names = ("detect", "lighting", "buttons", "welcome")
-        titles = ("KEYBOARD", "LIGHTING", "WHEEL & KEYS", "READY")
-        self.setup_progress.set_label(f"STEP {step + 1} OF 4 · {titles[step]}")
+        names = ("detect", "lighting", "welcome")
+        titles = ("KEYBOARD", "LIGHTING", "READY")
+        self.setup_progress.set_label(f"STEP {step + 1} OF 3 · {titles[step]}")
         self.setup_pages.set_visible_child_name(names[step])
         self.setup_back.set_visible(step > 0)
-        self.setup_apply.set_visible(step in (1, 2))
-        self.setup_next.set_label(("Continue", "Next", "Next", "Open Redragon Control")[step])
+        self.setup_apply.set_visible(step == 1)
+        self.setup_next.set_label(("Continue", "Next", "Open Redragon Control")[step])
         self._update_setup_navigation()
 
     def _update_setup_navigation(self):
@@ -464,19 +427,15 @@ class ControlWindow(Adw.ApplicationWindow):
             mode = MODES[index] if index < len(MODES) else "static"
             self.setup_apply.set_sensitive(not self._busy and bool(device) and (
                 self.controller.demo or mode in self.state.get("capabilities", {}).get("modes", ())))
-        elif self._setup_step == 2:
-            self.setup_apply.set_sensitive(not self._busy and bool(device) and (
-                self.controller.demo or bool(self.state.get("capabilities", {}).get("remap"))))
         devices = self.state.get("devices", [])
         text = (f"Detected: {device['name']} · {device.get('transport', 'USB')}" if device else
                 "Multiple keyboards detected. Choose your keyboard below." if len(devices) > 1 else
                 "No keyboard detected yet. Check the connection; we’ll keep looking.")
         self.setup_device_status.set_label(text)
         self.setup_summary.set_label(
-            ("Profile imported · Lighting preferences and key bindings saved\n" if self._setup_profile_imported else "") +
+            ("Profile imported · Lighting preferences saved\n" if self._setup_profile_imported else "") +
             (device['name'] if device else "Select your keyboard in Redragon Control when connected") + "\n" +
-            ("App lighting is active" if self.state.get("lighting_daemon", {}).get("running") else "Using onboard lighting") + " · " +
-            ("Remapping is active" if self.state.get("daemon", {}).get("running") else "Using default key actions"))
+            "Using onboard lighting · Closing the window quits the app")
 
     def _setup_scan(self):
         if not self._in_setup:
@@ -492,7 +451,7 @@ class ControlWindow(Adw.ApplicationWindow):
         return False
 
     def _setup_go_back(self, *_):
-        self._show_setup_step(0 if self._setup_profile_imported and self._setup_step == 3 else self._setup_step - 1)
+        self._show_setup_step(0 if self._setup_profile_imported and self._setup_step == 2 else self._setup_step - 1)
 
     def _import_setup_profile(self, *_):
         if self._busy:
@@ -506,7 +465,7 @@ class ControlWindow(Adw.ApplicationWindow):
     def _load_setup_profile(self, path):
         def imported(_result):
             self._setup_profile_imported = True
-            self._show_setup_step(3)
+            self._show_setup_step(2)
         self._run(lambda: self.controller.import_profile(path), imported)
 
     def _apply_setup(self, *_):
@@ -514,8 +473,6 @@ class ControlWindow(Adw.ApplicationWindow):
             return
         if self._setup_step == 1:
             self._save_lighting(apply=True)
-        elif self._setup_step == 2:
-            self._save_wheel(start=True)
 
     def _advance_setup(self, *_):
         if self._setup_step == 0:
@@ -528,7 +485,7 @@ class ControlWindow(Adw.ApplicationWindow):
                 self._setup_profile_imported = False
                 self._show_setup_step(1)
             self._run(detect, detected)
-        elif self._setup_step in (1, 2):
+        elif self._setup_step == 1:
             if self._busy:
                 return
             self._render_state(self.state)
@@ -653,52 +610,6 @@ class ControlWindow(Adw.ApplicationWindow):
         group.add(row)
         return scale
 
-    def _build_buttons(self):
-        page = self._page("buttons", "Buttons & wheel", "Give your controls a new job.", "input-mouse-symbolic")
-        live = Adw.PreferencesGroup()
-        page.append(live)
-        self.remapper_row = Adw.ActionRow(title="Live remapper", subtitle="Checking device support…")
-        self.remapper_indicator = Gtk.Image(icon_name="media-playback-stop-symbolic")
-        self.remapper_row.add_prefix(self.remapper_indicator)
-        self.remapper_button = _button("Start remapper", css_class="suggested-action")
-        self.remapper_button.set_valign(Gtk.Align.CENTER)
-        self.remapper_button.connect("clicked", self._toggle_remapper)
-        self.remapper_row.add_suffix(self.remapper_button)
-        live.add(self.remapper_row)
-
-        group = Adw.PreferencesGroup(title="Wheel controls", description="These are standard Linux media-key events. Verify which events your keyboard emits before starting the remapper.")
-        page.append(group)
-        for source, title, subtitle in PRESET_SOURCES:
-            row = Adw.ActionRow(title=title, subtitle=subtitle)
-            editor = Gtk.ComboBoxText.new_with_entry()
-            for target in TARGETS:
-                editor.append(target, TARGET_LABELS[target])
-            editor.set_active_id("default")
-            editor.get_child().add_css_class("key-entry")
-            editor.set_valign(Gtk.Align.CENTER)
-            editor.set_size_request(240, -1)
-            editor.set_tooltip_text("Linux key name, key chord, or disabled")
-            self._binding_editors[source] = editor
-            row.add_suffix(editor)
-            group.add(row)
-        buttons = _box(Gtk.Orientation.HORIZONTAL, 10)
-        self.wheel_actions = buttons
-        buttons.set_halign(Gtk.Align.END)
-        save = _button("Save wheel actions", css_class="suggested-action")
-        save.connect("clicked", self._save_wheel)
-        buttons.append(save)
-        page.append(buttons)
-
-        self.custom_group = Adw.PreferencesGroup(title="Other buttons", description="Remap a Linux key event to another key or a chord, such as KEY_LEFTCTRL+KEY_C.")
-        add = _button(icon="list-add-symbolic")
-        add.set_tooltip_text("Add a key binding")
-        add.connect("clicked", self._add_binding)
-        self.custom_group.set_header_suffix(add)
-        page.append(self.custom_group)
-        self.custom_rows = []
-        note, _ = self._note("Bindings run on this computer while the remapper is active. They are saved locally and are not written to the keyboard’s firmware.")
-        page.append(note)
-
     def _build_recovery(self):
         page = self._page("recovery", "Recovery", "A clear path back to a familiar setup.", "document-revert-symbolic")
         group = Adw.PreferencesGroup(title="Keyboard recovery")
@@ -713,14 +624,14 @@ class ControlWindow(Adw.ApplicationWindow):
 
         local = Adw.PreferencesGroup(title="App recovery", description="App settings and keyboard firmware are separate.")
         page.append(local)
-        row = Adw.ActionRow(title="Reset app settings", subtitle="Stop lighting control and remapping; restore local preferences")
+        row = Adw.ActionRow(title="Reset app settings", subtitle="Restore local lighting preferences")
         row.add_prefix(Gtk.Image(icon_name="edit-undo-symbolic"))
         reset = _button("Reset app settings…", css_class="destructive-action")
         reset.set_valign(Gtk.Align.CENTER)
         reset.connect("clicked", self._reset_app)
         row.add_suffix(reset)
         local.add(row)
-        note, _ = self._note("Export a profile from the menu before making changes you want to keep. Profiles include your lighting preferences and button bindings.")
+        note, _ = self._note("Export a profile from the menu before making changes you want to keep. Profiles include your lighting preferences.")
         page.append(note)
 
     def _close_requested(self, *_):
@@ -785,7 +696,6 @@ class ControlWindow(Adw.ApplicationWindow):
         # Refreshing runtime status or another section must not erase drafts.
         reset_editors = reset_editors or self._in_setup or previous_config is None
         update_lighting = reset_editors or _lighting(previous_config) != _lighting(config)
-        previous_bindings = _bindings(previous_config or {})
         self.state = state
         self._updating = True
         try:
@@ -833,28 +743,6 @@ class ControlWindow(Adw.ApplicationWindow):
                 self.color_entry.set_text(lighting.get("color", "#E74957"))
                 self.brightness_scale.set_value(lighting.get("brightness", 70))
                 self.speed_scale.set_value(lighting.get("speed", 50))
-            bindings = _bindings(config)
-            for source in self._binding_editors:
-                value = bindings.get(source, "default")
-                if reset_editors or value != previous_bindings.get(source, "default"):
-                    self._set_binding_editor(source, value)
-            self._render_custom_bindings(bindings)
-            if self._in_setup:
-                self._setup_bindings = dict(bindings)
-            running = bool(state.get("daemon", {}).get("running"))
-            remap_supported = bool(capabilities.get("remap"))
-            self.remapper_button.set_label("Stop remapper" if running else "Start remapper")
-            self.remapper_button.set_sensitive((running or remap_supported) and not demo)
-            self.remapper_button.remove_css_class("suggested-action")
-            self.remapper_button.remove_css_class("destructive-action")
-            self.remapper_button.add_css_class("destructive-action" if running else "suggested-action")
-            self.remapper_indicator.set_from_icon_name("media-playback-start-symbolic" if running else "media-playback-stop-symbolic")
-            subtitle = "Active · Saved bindings are being applied" if running else "Stopped · Start to apply your saved bindings"
-            if demo:
-                subtitle = "Demo mode · Live input is unavailable"
-            elif not remap_supported and not running:
-                subtitle = state.get("remap_message") or "Connect a supported device with input access to start"
-            self.remapper_row.set_subtitle(subtitle)
             for name in ("save-profile", "load-profile", "import-profile", "export-profile"):
                 self.lookup_action(name).set_enabled(not demo and not self._in_setup)
             factory = bool(capabilities.get("factory_reset"))
@@ -864,43 +752,6 @@ class ControlWindow(Adw.ApplicationWindow):
             self._updating = False
         self._lighting_preview_changed()
         self._update_setup_navigation()
-
-    def _set_binding_editor(self, source, value):
-        editor = self._binding_editors[source]
-        if value in TARGET_LABELS:
-            editor.set_active_id(value)
-        else:
-            editor.set_active(-1)
-            editor.get_child().set_text(str(value))
-
-    def _render_custom_bindings(self, bindings):
-        for row in self.custom_rows:
-            self.custom_group.remove(row)
-        self.custom_rows.clear()
-        presets = {item[0] for item in PRESET_SOURCES}
-        for source, target in sorted(bindings.items()):
-            if source in presets:
-                continue
-            row = Adw.ActionRow(title=str(source), subtitle=str(target))
-            delete = _button(icon="user-trash-symbolic")
-            delete.set_tooltip_text("Remove this binding")
-            delete.set_valign(Gtk.Align.CENTER)
-            delete.connect("clicked", lambda _button, key=source: self._remove_binding(key))
-            row.add_suffix(delete)
-            self.custom_group.add(row)
-            self.custom_rows.append(row)
-        if not self.custom_rows:
-            row = Adw.ActionRow(title="No additional bindings", subtitle="Use + to add a key or button")
-            row.set_sensitive(False)
-            self.custom_group.add(row)
-            self.custom_rows.append(row)
-
-    def _remove_binding(self, source):
-        if self._in_setup:
-            self._setup_bindings.pop(source, None)
-            self._render_custom_bindings(self._setup_bindings)
-        else:
-            self._run(lambda: self.controller.remove_binding(source), "Binding removed")
 
     def _device_selected(self, *_):
         if self._updating:
@@ -987,66 +838,8 @@ class ControlWindow(Adw.ApplicationWindow):
             message = "Demo lighting preferences saved · no keyboard changed"
         self._run(lambda: self.controller.set_lighting(mode=mode, color=color, brightness=brightness, speed=speed, apply=apply), success or message)
 
-    def _save_wheel(self, *_, success=None, start=False):
-        labels_to_targets = {label: target for target, label in TARGET_LABELS.items()}
-        values = {source: labels_to_targets.get(editor.get_child().get_text().strip(), editor.get_child().get_text().strip())
-                  for source, editor in self._binding_editors.items()}
-
-        bindings = dict(self._setup_bindings if self._in_setup else self.state.get("config", {}).get("bindings", {}))
-        def save():
-            for source, target in values.items():
-                if target and target != "default":
-                    bindings[source] = target
-                else:
-                    bindings.pop(source, None)
-            self.controller.set_bindings(bindings)
-            if start and any(target != "default" for target in bindings.values()):
-                self.controller.start_daemon()
-
-        self._run(save, success or "Wheel actions saved")
-
-    def _toggle_remapper(self, *_):
-        running = bool(self.state.get("daemon", {}).get("running"))
-        self._run(self.controller.stop_daemon if running else self.controller.start_daemon,
-                  "Remapper stopped" if running else "Remapper started")
-
-    def _add_binding(self, *_):
-        dialog = Adw.AlertDialog(heading="Add a button binding", body="Use a Linux input key name for the source. The target can be a key, a chord, or disabled.")
-        fields = _box(spacing=10)
-        source = Gtk.Entry(placeholder_text="Source · for example KEY_F13")
-        target = Gtk.Entry(placeholder_text="Target · for example KEY_LEFTCTRL+KEY_C")
-        source.add_css_class("key-entry")
-        target.add_css_class("key-entry")
-        fields.append(source)
-        fields.append(target)
-        dialog.set_extra_child(fields)
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("save", "Save binding")
-        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
-        dialog.set_default_response("save")
-        dialog.set_close_response("cancel")
-
-        def response(_dialog, name):
-            if name == "save":
-                source_value, target_value = source.get_text().strip(), target.get_text().strip()
-                if self._in_setup:
-                    try:
-                        validate_binding(source_value, target_value)
-                    except ControlError as error:
-                        self._error(error)
-                        return
-                    self._setup_bindings[source_value] = target_value
-                    if source_value in self._binding_editors:
-                        self._set_binding_editor(source_value, target_value)
-                    self._render_custom_bindings(self._setup_bindings)
-                else:
-                    self._run(lambda: self.controller.set_binding(source_value, target_value), "Binding saved")
-
-        dialog.connect("response", response)
-        dialog.present(self)
-
     def _reset_app(self, *_):
-        self._confirm("Reset app settings?", "This stops lighting control and the live remapper, then restores this app’s local lighting preferences and bindings. Saved named profiles remain available. Keyboard firmware settings are separate.", "Reset app settings", lambda: self._run(self.controller.reset_app, "App settings restored", reset_editors=True))
+        self._confirm("Reset app settings?", "This restores this app’s local lighting preferences and clears legacy bindings. Saved named profiles remain available. Keyboard firmware settings are separate.", "Reset app settings", lambda: self._run(self.controller.reset_app, "App settings restored", reset_editors=True))
 
     def _factory_reset(self, *_):
         if self.state.get("capabilities", {}).get("factory_reset"):
@@ -1054,14 +847,14 @@ class ControlWindow(Adw.ApplicationWindow):
         else:
             guidance = self.state.get("factory_reset_message") or (
                 "A software factory reset has not been verified for this keyboard. Use the factory-reset procedure in the manual supplied with your exact model.\n\n"
-                "To undo this app’s changes, stop the remapper or use Reset app settings. This app does not write unverified commands to the keyboard’s firmware.")
+                "Use Restore previous lighting to undo saved lighting, or Reset app settings to clear local preferences. This app does not write unverified commands to the keyboard’s firmware.")
             dialog = Adw.AlertDialog(heading="Keyboard factory reset", body=guidance)
             actions = _box(spacing=8)
-            stop = _button("Stop app lighting and remapping", css_class="suggested-action")
+            stop = _button("Stop legacy keyboard services", css_class="suggested-action")
             stop.set_sensitive(not self.state.get("demo"))
 
             def stopped(_result):
-                stop.set_label("App lighting and remapping are stopped")
+                stop.set_label("Legacy keyboard services are stopped")
                 stop.set_sensitive(False)
 
             stop.connect("clicked", lambda *_: self._run(self.controller.stop_all, stopped))
@@ -1105,7 +898,7 @@ class ControlWindow(Adw.ApplicationWindow):
             if not profiles:
                 self._toast("No saved profiles yet. Save one from the menu.")
                 return
-            dialog = Adw.AlertDialog(heading="Load a named profile", body="This replaces your current local lighting preferences and bindings.")
+            dialog = Adw.AlertDialog(heading="Load a named profile", body="This replaces your current local lighting preferences.")
             selection = Gtk.DropDown.new_from_strings(profiles)
             dialog.set_extra_child(selection)
             dialog.add_response("cancel", "Cancel")

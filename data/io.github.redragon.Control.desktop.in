@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=Redragon Control
-Comment=Keyboard lighting, wheel and button mappings
-Exec=@LAUNCHER@ tray
+Comment=Save keyboard lighting
+Exec=@LAUNCHER@ gui
 Icon=io.github.redragon.Control
 Terminal=false
 Categories=Settings;HardwareSettings;GTK;

@@ -1,4 +1,4 @@
-"""Validated, atomic user settings shared by the GUI, CLI and remapper."""
+"""Validated, atomic user settings shared by the GUI and CLI; legacy bindings remain inert."""
 
 from contextlib import contextmanager
 from copy import deepcopy

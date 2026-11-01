@@ -10,31 +10,24 @@ import sys
 
 root = Path(sys.argv[1])
 sys.path.insert(0, str(root))
-from redragon.background import BackgroundStore
-from redragon.config import ConfigStore, atomic_write
-from redragon.runtime import daemon_status
-settings_path = ConfigStore().path
-background = BackgroundStore(settings_path)
-if not background.path.exists():
-    atomic_write(background.path, {'remap': daemon_status(settings_path)['running'], 'rgb': daemon_status(settings_path, 'rgb')['running']})
 bin_dir = Path.home() / '.local/bin'
 data_dir = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share'))
 apps = data_dir / 'applications'
 icons = data_dir / 'icons/hicolor/scalable/apps'
-config_dir = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config'))
-autostart = config_dir / 'autostart'
-for directory in (bin_dir, apps, icons, autostart):
+for directory in (bin_dir, apps, icons):
     directory.mkdir(parents=True, exist_ok=True)
 launcher = bin_dir / 'redragonctl'
 launcher.write_text('#!/usr/bin/env bash\nexec ' + shlex.quote(str(root / 'run.sh')) + ' "$@"\n')
 launcher.chmod(0o755)
-from redragon.autostart import desktop_arg, install
+from redragon.autostart import desktop_arg, disable
 desktop_exec = desktop_arg(str(launcher))
 template = (root / 'data/io.github.redragon.Control.desktop.in').read_text()
 (apps / 'io.github.redragon.Control.desktop').write_text(template.replace('@LAUNCHER@', desktop_exec))
-install([str(launcher)])
+disable()
+from redragon.core import Controller
+Controller().retire_background()
 icon = root / 'data/io.github.redragon.Control.svg'
 if icon.exists():
     (icons / icon.name).write_bytes(icon.read_bytes())
-print(f'Installed {launcher}, desktop launcher and tray login autostart. Keep project directory at {root}.')
+print(f'Installed {launcher}, desktop launcher; removed legacy login startup. Keep project directory at {root}.')
 PY
